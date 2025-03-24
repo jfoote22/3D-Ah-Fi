@@ -148,64 +148,109 @@ export default function ImageGenerator() {
     setModelGenerationTime(null);
 
     try {
+      console.log('Starting 3D model generation with prompt:', prompt);
+      
       // Add timeout to fetch request - note this is a client-side timeout
       // The server also has its own timeout handling
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+      const startTime = Date.now();
+      
+      // Status tracking for debugging
+      let lastStatusLog = Date.now();
+      const statusInterval = setInterval(() => {
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        console.log(`[Client] Still waiting for 3D model after ${elapsedTime.toFixed(0)} seconds...`);
+      }, 5000); // Log every 5 seconds
 
-      const response = await fetch('/api/generate-3d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt: prompt,
-          imageUrl: imageUrl // Optional for Hunyuan3D-2, but including for context
-        }),
-        signal: controller.signal
-      }).catch(fetchError => {
-        // Handle abort/timeout specifically
-        if (fetchError.name === 'AbortError') {
-          throw new Error('Request timed out. 3D model generation takes time, please try again with a simpler prompt or image.');
+      try {
+        console.log('[Client] Sending request to generate-3d API...');
+        
+        const response = await fetch('/api/generate-3d', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            prompt: prompt,
+            imageUrl: imageUrl // Optional for Hunyuan3D-2, but including for context
+          }),
+          signal: controller.signal
+        }).catch(fetchError => {
+          // Handle abort/timeout specifically
+          if (fetchError.name === 'AbortError') {
+            clearInterval(statusInterval);
+            throw new Error('Request timed out. 3D model generation takes time, please try again with a simpler prompt or image.');
+          }
+          throw fetchError;
+        });
+        
+        // Clear tracking
+        clearTimeout(timeoutId);
+        clearInterval(statusInterval);
+        
+        console.log('[Client] Received response:', response.status, response.statusText);
+
+        // For debugging - log non-2xx responses
+        if (!response.ok) {
+          console.error(`[Client] Server error status: ${response.status}`);
+          try {
+            // Try to extract detailed error information
+            const errorData = await response.json();
+            console.error('[Client] Server error details:', errorData);
+            
+            // Check for timeout status
+            if (response.status === 504) {
+              throw new Error(
+                errorData.error || 
+                '3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes to generate complex models. Please try again with a simpler prompt or image.'
+              );
+            }
+            
+            // If we have detailed error with currentStep, show it to help debugging
+            if (errorData.currentStep) {
+              throw new Error(`Error during ${errorData.currentStep}: ${errorData.error || 'Unknown error'}`);
+            }
+            
+            throw new Error(`Server responded with ${response.status}: ${errorData.error || response.statusText}`);
+          } catch (parseError) {
+            if (parseError instanceof Error && parseError.message.includes('currentStep')) {
+              throw parseError; // Re-throw the parsed error with step info
+            }
+            // If we can't parse the response, just use the status text
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`Server responded with ${response.status}: ${errorText}`);
+          }
         }
-        throw fetchError;
-      });
 
-      // Clear the timeout
-      clearTimeout(timeoutId);
+        console.log('[Client] Parsing response JSON...');
+        const data = await response.json() as ModelGenerationResponse;
+        console.log('[Client] 3D generation response:', data);
 
-      if (!response.ok) {
-        // Check for timeout status
-        if (response.status === 504) {
-          const errorData = await response.json().catch(() => ({ error: 'Gateway Timeout' }));
-          throw new Error(
-            errorData.error || 
-            '3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes to generate complex models. Please try again with a simpler prompt or image.'
-          );
+        if ('error' in data) {
+          throw new Error(data.error as string);
+        }
+
+        if (!data.modelUrl) {
+          throw new Error('No model URL returned from the server');
+        }
+
+        setModelUrl(data.modelUrl);
+        if (data.generationTime) {
+          setModelGenerationTime(data.generationTime);
         }
         
-        const errorText = await response.text();
-        throw new Error(`Server responded with ${response.status}: ${errorText}`);
+        // Set success message
+        setModel3DSuccess('3D model generated successfully!');
+        
+        // Clear success message after 5 seconds
+        setTimeout(() => {
+          setModel3DSuccess('');
+        }, 5000);
+        
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        clearInterval(statusInterval);
+        throw fetchError;
       }
-
-      const data = await response.json() as ModelGenerationResponse;
-      console.log('3D generation response:', data);
-
-      if ('error' in data) {
-        throw new Error(data.error as string);
-      }
-
-      setModelUrl(data.modelUrl);
-      if (data.generationTime) {
-        setModelGenerationTime(data.generationTime);
-      }
-      
-      // Set success message
-      setModel3DSuccess('3D model generated successfully!');
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => {
-        setModel3DSuccess('');
-      }, 5000);
-      
     } catch (error) {
       console.error('Error generating 3D model:', error);
       

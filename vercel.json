@@ -6,8 +6,8 @@
   "installCommand": "npm install",
   "functions": {
     "src/app/api/generate-3d/route.ts": {
-      "memory": 1024,
-      "maxDuration": 150
+      "memory": 3008,
+      "maxDuration": 900
     },
     "src/app/api/generate-image/route.ts": {
       "memory": 1024,
