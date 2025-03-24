@@ -6,22 +6,42 @@ import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 export default function Login() {
-  const { user, loading, signInWithGoogle } = useAuth();
+  const { user, loading, error: authContextError, signInWithGoogle } = useAuth();
   const router = useRouter();
   const [authError, setAuthError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [firebaseConfigInfo, setFirebaseConfigInfo] = useState<string>('');
+
+  useEffect(() => {
+    // Check if Firebase configuration environment variables are set
+    const envVars = {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 'Set' : 'Not set',
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? 'Set' : 'Not set',
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'Set' : 'Not set',
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? 'Set' : 'Not set',
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? 'Set' : 'Not set',
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? 'Set' : 'Not set',
+    };
+    
+    setFirebaseConfigInfo(`Firebase env vars: ${JSON.stringify(envVars)}`);
+  }, []);
 
   useEffect(() => {
     // Debug info
-    console.log('Login page - Auth state:', { user, loading });
-    setDebugInfo(`Auth state: ${loading ? 'Loading' : 'Ready'}, User: ${user ? 'Authenticated' : 'Not authenticated'}`);
+    console.log('Login page - Auth state:', { user, loading, authContextError });
+    setDebugInfo(`Auth state: ${loading ? 'Loading' : 'Ready'}, User: ${user ? 'Authenticated' : 'Not authenticated'}, Auth error: ${authContextError || 'None'}`);
+    
+    // If there's an error in AuthContext, display it on the page
+    if (authContextError) {
+      setAuthError(authContextError);
+    }
     
     // If user is authenticated, redirect to home page
     if (user && !loading) {
       console.log('User is authenticated, redirecting to home page');
       router.push('/');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, authContextError]);
 
   const handleGoogleSignIn = async () => {
     try {
@@ -68,9 +88,12 @@ export default function Login() {
           )}
           
           {/* Debug info - only in development */}
-          {process.env.NODE_ENV !== 'production' && debugInfo && (
+          {process.env.NODE_ENV !== 'production' && (
             <div className="mb-6 p-4 bg-slate-900/60 border border-slate-700 rounded-lg">
               <p className="text-slate-400 text-xs font-mono">{debugInfo}</p>
+              {firebaseConfigInfo && (
+                <p className="text-slate-400 text-xs font-mono mt-2">{firebaseConfigInfo}</p>
+              )}
             </div>
           )}
           
