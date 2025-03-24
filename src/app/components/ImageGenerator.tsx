@@ -57,6 +57,7 @@ export default function ImageGenerator() {
   const [generating3D, setGenerating3D] = useState(false);
   const [model3DError, setModel3DError] = useState('');
   const [modelGenerationTime, setModelGenerationTime] = useState<number | null>(null);
+  const [model3DSuccess, setModel3DSuccess] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -147,9 +148,10 @@ export default function ImageGenerator() {
     setModelGenerationTime(null);
 
     try {
-      // Add timeout to fetch request
+      // Add timeout to fetch request - note this is a client-side timeout
+      // The server also has its own timeout handling
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout (3D generation takes longer)
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
 
       const response = await fetch('/api/generate-3d', {
         method: 'POST',
@@ -159,12 +161,27 @@ export default function ImageGenerator() {
           imageUrl: imageUrl // Optional for Hunyuan3D-2, but including for context
         }),
         signal: controller.signal
+      }).catch(fetchError => {
+        // Handle abort/timeout specifically
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. 3D model generation takes time, please try again with a simpler prompt or image.');
+        }
+        throw fetchError;
       });
 
       // Clear the timeout
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        // Check for timeout status
+        if (response.status === 504) {
+          const errorData = await response.json().catch(() => ({ error: 'Gateway Timeout' }));
+          throw new Error(
+            errorData.error || 
+            '3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes to generate complex models. Please try again with a simpler prompt or image.'
+          );
+        }
+        
         const errorText = await response.text();
         throw new Error(`Server responded with ${response.status}: ${errorText}`);
       }
@@ -180,9 +197,31 @@ export default function ImageGenerator() {
       if (data.generationTime) {
         setModelGenerationTime(data.generationTime);
       }
+      
+      // Set success message
+      setModel3DSuccess('3D model generated successfully!');
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setModel3DSuccess('');
+      }, 5000);
+      
     } catch (error) {
       console.error('Error generating 3D model:', error);
-      setModel3DError(error instanceof Error ? error.message : 'Unknown error occurred');
+      
+      // Handle different types of errors with user-friendly messages
+      if (error instanceof Error) {
+        if (error.message.includes('timed out') || error.message.includes('timeout')) {
+          setModel3DError(
+            'The 3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes for complex images. ' +
+            'Please try again with a simpler prompt or image.'
+          );
+        } else {
+          setModel3DError(error.message);
+        }
+      } else {
+        setModel3DError('Failed to generate 3D model');
+      }
     } finally {
       setGenerating3D(false);
     }
@@ -590,6 +629,17 @@ export default function ImageGenerator() {
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                         </svg>
                         {model3DError}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {model3DSuccess && (
+                    <div className="bg-green-900/30 border border-green-800 rounded-lg p-3">
+                      <p className="text-sm text-green-400 flex items-center">
+                        <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        {model3DSuccess}
                       </p>
                     </div>
                   )}

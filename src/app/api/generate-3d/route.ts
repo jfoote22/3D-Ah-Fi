@@ -8,6 +8,19 @@ let requestCount = 0;
 const MODEL_ID = "ndreca/hunyuan3d-2:4ac0c7d1ef7e7dd58bf92364262597272dea79bfdb158b26027f54eb667f28b8";
 const MODEL_NAME = "Hunyuan3D-2";
 
+// Set timeout for the Replicate API call (in milliseconds)
+// We set this to slightly less than the Vercel function timeout to ensure we can handle gracefully
+const API_TIMEOUT_MS = 140000; // 140 seconds (2 minutes and 20 seconds)
+
+// Helper function to create a promise that rejects after a timeout
+function createTimeoutPromise(ms: number) {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Operation timed out after ${ms / 1000} seconds`));
+    }, ms);
+  });
+}
+
 export async function POST(req: Request) {
   requestCount++;
   const currentRequest = requestCount;
@@ -80,11 +93,14 @@ export async function POST(req: Request) {
     console.log(`[3D Request #${currentRequest}] Input parameters:`, JSON.stringify(input, null, 2));
     
     try {
-      // Use the simpler run method as shown in the example
-      const output = await replicate.run(
-        MODEL_ID,
-        { input }
-      );
+      // Race between the API call and a timeout
+      const output = await Promise.race([
+        replicate.run(
+          MODEL_ID,
+          { input }
+        ),
+        createTimeoutPromise(API_TIMEOUT_MS)
+      ]);
 
       console.log(`[3D Request #${currentRequest}] Output received:`, output);
       
@@ -127,7 +143,18 @@ export async function POST(req: Request) {
       // Check for specific error types and provide helpful messages
       const errorMessage = replicateError instanceof Error ? replicateError.message : String(replicateError);
       
-      if (errorMessage.includes('402') || errorMessage.includes('Payment Required')) {
+      // Handle timeout specifically
+      if (errorMessage.includes('timed out')) {
+        console.error(`[3D Request #${currentRequest}] Request timed out after ${API_TIMEOUT_MS/1000} seconds`);
+        return NextResponse.json(
+          { 
+            error: '3D model generation is taking longer than expected. Please try again with a simpler prompt or image.',
+            timeoutDetails: `The operation timed out after ${API_TIMEOUT_MS/1000} seconds. The Hunyuan3D-2 model requires significant processing time.`,
+            isTimeout: true
+          },
+          { status: 504 }
+        );
+      } else if (errorMessage.includes('402') || errorMessage.includes('Payment Required')) {
         return NextResponse.json(
           { error: 'Payment required for this model. Please set up billing on Replicate.' },
           { status: 402 }
@@ -152,6 +179,20 @@ export async function POST(req: Request) {
     }
   } catch (error) {
     console.error(`[3D Request #${currentRequest}] Unexpected error generating 3D model:`, error);
+    
+    // Check if the error is a timeout from Vercel
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
+      return NextResponse.json(
+        { 
+          error: '3D model generation timed out. Hunyuan3D-2 takes 2-3 minutes to generate models.',
+          details: 'Please try again with a simpler prompt or image. Complex images may require more processing time.',
+          isTimeout: true
+        },
+        { status: 504 }
+      );
+    }
+    
     return NextResponse.json(
       { error: 'An unexpected error occurred while generating the 3D model' },
       { status: 500 }
