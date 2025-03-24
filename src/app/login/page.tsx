@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/lib/hooks/useAuth';
+import Link from 'next/link';
+import { getApps } from 'firebase/app';
 
 export default function Login() {
   const { user, loading, error: authContextError, signInWithGoogle } = useAuth();
@@ -11,19 +13,17 @@ export default function Login() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [firebaseConfigInfo, setFirebaseConfigInfo] = useState<string>('');
+  const [signInStatus, setSignInStatus] = useState<string>('idle');
 
+  // Check Firebase initialization status
   useEffect(() => {
-    // Check if Firebase configuration environment variables are set
-    const envVars = {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 'Set' : 'Not set',
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? 'Set' : 'Not set',
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'Set' : 'Not set',
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? 'Set' : 'Not set',
-      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? 'Set' : 'Not set',
-      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? 'Set' : 'Not set',
-    };
-    
-    setFirebaseConfigInfo(`Firebase env vars: ${JSON.stringify(envVars)}`);
+    try {
+      const firebaseApps = getApps();
+      setFirebaseConfigInfo(`Firebase apps initialized: ${firebaseApps.length > 0 ? 'Yes' : 'No'}`);
+    } catch (error) {
+      console.error('Error checking Firebase app status:', error);
+      setFirebaseConfigInfo(`Firebase app error: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -46,14 +46,23 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     try {
       setAuthError(null);
+      setSignInStatus('signing-in');
       console.log('Attempting Google sign in...');
       await signInWithGoogle();
+      setSignInStatus('success');
       console.log('Google sign in completed');
       // No need to redirect here, the useEffect will handle it
     } catch (error) {
       console.error('Error signing in with Google:', error);
+      setSignInStatus('error');
       setAuthError(`Failed to sign in with Google: ${error instanceof Error ? error.message : String(error)}`);
     }
+  };
+
+  // For testing - allows bypass to home page
+  const bypassAuth = () => {
+    console.log('Bypassing authentication for testing');
+    router.push('/');
   };
 
   if (loading) {
@@ -94,21 +103,43 @@ export default function Login() {
               {firebaseConfigInfo && (
                 <p className="text-slate-400 text-xs font-mono mt-2">{firebaseConfigInfo}</p>
               )}
+              <p className="text-slate-400 text-xs font-mono mt-2">Sign in status: {signInStatus}</p>
             </div>
           )}
           
           <button
             onClick={handleGoogleSignIn}
-            className="w-full flex items-center justify-center gap-3 bg-slate-900 border border-slate-700 text-white py-3 px-4 rounded-lg hover:bg-slate-800 transition-colors shadow-md"
+            disabled={signInStatus === 'signing-in'}
+            className="w-full flex items-center justify-center gap-3 bg-slate-900 border border-slate-700 text-white py-3 px-4 rounded-lg hover:bg-slate-800 transition-colors shadow-md disabled:opacity-50"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-            </svg>
-            Sign in with Google
+            {signInStatus === 'signing-in' ? (
+              <>
+                <div className="w-5 h-5 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin"></div>
+                Signing in...
+              </>
+            ) : (
+              <>
+                <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+                Sign in with Google
+              </>
+            )}
           </button>
+          
+          {process.env.NODE_ENV !== 'production' && (
+            <div className="mt-4">
+              <button 
+                onClick={bypassAuth}
+                className="w-full py-2 bg-green-900/20 border border-green-800/30 text-green-500 rounded-lg hover:bg-green-900/30 transition-colors"
+              >
+                Bypass Authentication (Testing Only)
+              </button>
+            </div>
+          )}
           
           <div className="mt-8 text-center text-sm">
             <p className="text-slate-500">

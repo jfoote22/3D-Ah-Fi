@@ -3,8 +3,9 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Fallback configuration in case environment variables are not set
-const fallbackConfig = {
+// Hardcoded configuration - use this directly instead of relying on environment variables
+// that might have formatting issues
+const firebaseConfig = {
   apiKey: "AIzaSyBjBbkqka_omkqkTwH_YmUS2PDJsG-snio",
   authDomain: "test2-21fd5.firebaseapp.com",
   projectId: "test2-21fd5",
@@ -13,28 +14,29 @@ const fallbackConfig = {
   appId: "1:952438236726:web:b028325932d46d0c869a97",
 };
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || fallbackConfig.apiKey,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || fallbackConfig.authDomain,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || fallbackConfig.projectId,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || fallbackConfig.storageBucket,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || fallbackConfig.messagingSenderId,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || fallbackConfig.appId,
-};
-
-// Add some debugging logs in development to ensure configuration is working
-if (process.env.NODE_ENV !== 'production') {
-  console.log('Firebase initialization with config:', 
-    { 
-      apiKeyPrefix: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 5) + '...' : 'not set',
-      authDomain: firebaseConfig.authDomain,
-      projectId: firebaseConfig.projectId
-    }
-  );
-}
+// Log the configuration for debugging
+console.log('Firebase config being used:', {
+  apiKeyPrefix: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 5)}...` : 'not set',
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId,
+  storageBucket: firebaseConfig.storageBucket
+});
 
 // Initialize Firebase
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+let app;
+try {
+  if (getApps().length) {
+    app = getApp();
+    console.log('Retrieved existing Firebase app');
+  } else {
+    app = initializeApp(firebaseConfig);
+    console.log('Initialized new Firebase app successfully');
+  }
+} catch (error) {
+  console.error('Failed to initialize Firebase app:', error);
+  throw error; // Rethrow to make initialization failures very visible
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
