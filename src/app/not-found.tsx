@@ -20,7 +20,7 @@ export default function NotFound() {
           <h1 className="text-5xl font-bold text-red-400 mb-4">404</h1>
           <h2 className="text-2xl font-bold gradient-text mb-4">Page Not Found</h2>
           <p className="text-slate-400 mb-6">
-            Sorry, we couldn't find the page you're looking for.
+            Sorry, we couldn&apos;t find the page you&apos;re looking for.
           </p>
           
           {isClient && (

@@ -555,7 +555,7 @@ export default function ImageGenerator() {
                   </div>
                   
                   <p className="text-sm text-slate-400">
-                    Transform your image into a detailed 3D model with Tencent's advanced Hunyuan3D-2 technology.
+                    Transform your image into a detailed 3D model with Tencent&apos;s advanced Hunyuan3D-2 technology.
                   </p>
                   
                   <button
