@@ -1,15 +1,19 @@
-import { openai } from "@ai-sdk/openai";
-import { convertToCoreMessages, streamText } from "ai";
+import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const result = await streamText({
-    model: openai("gpt-4o"),
-    messages: convertToCoreMessages(messages),
-    system: "You are a helpful AI assistant",
-  });
-
-  return result.toDataStreamResponse();
+  try {
+    // Return a message indicating this functionality is disabled
+    return NextResponse.json({
+      text: "OpenAI chat is currently disabled. Please configure OPENAI_API_KEY in environment variables to enable this feature.",
+      error: "API_KEY_MISSING",
+      disabled: true
+    }, { status: 503 });
+  } catch (error) {
+    console.error("Error in chat route:", error);
+    return NextResponse.json({
+      error: "Internal server error",
+    }, { status: 500 });
+  }
 }

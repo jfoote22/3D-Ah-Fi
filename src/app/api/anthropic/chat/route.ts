@@ -1,15 +1,19 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { convertToCoreMessages, streamText } from "ai";
+import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const result = await streamText({
-    model: anthropic("claude-3-5-sonnet-20240620"),
-    messages: convertToCoreMessages(messages),
-    system: "You are a helpful AI assistant",
-  });
-
-  return result.toDataStreamResponse();
+  try {
+    // Return a message indicating this functionality is disabled
+    return NextResponse.json({
+      text: "Anthropic chat is currently disabled. Please configure ANTHROPIC_API_KEY in environment variables to enable this feature.",
+      error: "API_KEY_MISSING",
+      disabled: true
+    }, { status: 503 });
+  } catch (error) {
+    console.error("Error in Anthropic chat route:", error);
+    return NextResponse.json({
+      error: "Internal server error",
+    }, { status: 500 });
+  }
 }
