@@ -3,15 +3,5 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "images": {
-    "domains": [
-      "placehold.co",
-      "replicate.com",
-      "replicate.delivery",
-      "firebasestorage.googleapis.com",
-      "images.unsplash.com",
-      "lh3.googleusercontent.com"
-    ]
-  }
+  "installCommand": "npm install"
 } 
