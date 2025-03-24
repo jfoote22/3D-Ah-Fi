@@ -8,6 +8,7 @@ import { storage } from '@/lib/firebase/firebase';
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { db } from '@/lib/firebase/firebase';
 import { collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { Loader2, Box } from 'lucide-react';
 
 // Define interfaces for the response types
 interface ImageGenerationResponse {
@@ -65,7 +66,7 @@ export default function ImageGenerator() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form submitted with prompt:', prompt);
+    console.log('[DEBUG] Form submitted with prompt:', prompt);
     
     setLoading(true);
     setError('');
@@ -81,12 +82,17 @@ export default function ImageGenerator() {
 
     try {
       const startTime = Date.now();
+      console.log('[DEBUG] Starting image generation at:', new Date().toISOString());
       
       // Add timeout to fetch request
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => {
+        console.log('[DEBUG] Request timeout triggered after 30 seconds');
+        controller.abort();
+      }, 30000); // 30 second timeout
 
       try {
+        console.log('[DEBUG] Sending fetch request to /api/generate-image');
         const response = await fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -96,31 +102,46 @@ export default function ImageGenerator() {
 
         // Clear the timeout
         clearTimeout(timeoutId);
+        console.log('[DEBUG] Fetch completed, timeout cleared');
 
-        console.log('Response status:', response.status);
+        console.log('[DEBUG] Response status:', response.status, response.statusText);
         
         if (!response.ok) {
-          const errorText = await response.text();
+          console.error('[DEBUG] Response not OK:', response.status, response.statusText);
+          let errorText;
+          try {
+            errorText = await response.text();
+            console.error('[DEBUG] Error response body:', errorText);
+          } catch (textError) {
+            console.error('[DEBUG] Failed to read error response text:', textError);
+            errorText = 'Unknown error occurred';
+          }
           throw new Error(`Server responded with ${response.status}: ${errorText}`);
         }
         
+        console.log('[DEBUG] Parsing response JSON');
         const data = await response.json() as ImageGenerationResponse;
-        console.log('Response data:', data);
+        console.log('[DEBUG] Response data:', data);
         
         if ('error' in data) {
+          console.error('[DEBUG] Error in response data:', data.error);
           throw new Error(data.error as string);
         }
         
         // Increment the image key to force a refresh of the image component
         setImageKey(prevKey => prevKey + 1);
+        console.log('[DEBUG] Setting image URL:', data.imageUrl);
         setImageUrl(data.imageUrl);
         
         // Set image details with generation time calculated client-side
+        const generationTime = (Date.now() - startTime) / 1000;
+        console.log(`[DEBUG] Total generation time: ${generationTime.toFixed(2)} seconds`);
         setImageDetails({
           ...data,
-          generationTime: (Date.now() - startTime) / 1000 // Convert to seconds
+          generationTime: generationTime // Convert to seconds
         });
       } catch (fetchError) {
+        console.error('[DEBUG] Fetch error:', fetchError);
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
           throw new Error('Request timed out. The server took too long to respond.');
         }
@@ -148,23 +169,34 @@ export default function ImageGenerator() {
     setModelGenerationTime(null);
 
     try {
-      console.log('Starting 3D model generation with prompt:', prompt);
+      console.log('[DEBUG-3D] Starting 3D model generation with prompt:', prompt);
+      console.log('[DEBUG-3D] Image URL:', imageUrl ? imageUrl.substring(0, 50) + '...' : 'none');
       
       // Add timeout to fetch request - note this is a client-side timeout
       // The server also has its own timeout handling
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+      const timeoutId = setTimeout(() => {
+        console.log('[DEBUG-3D] Client-side timeout triggered after 5 minutes');
+        controller.abort();
+      }, 300000); // 5 minute timeout
       const startTime = Date.now();
       
       // Status tracking for debugging
       let lastStatusLog = Date.now();
       const statusInterval = setInterval(() => {
         const elapsedTime = (Date.now() - startTime) / 1000;
-        console.log(`[Client] Still waiting for 3D model after ${elapsedTime.toFixed(0)} seconds...`);
+        console.log(`[DEBUG-3D] Still waiting for 3D model after ${elapsedTime.toFixed(0)} seconds...`);
       }, 5000); // Log every 5 seconds
 
       try {
-        console.log('[Client] Sending request to generate-3d API...');
+        console.log('[DEBUG-3D] Preparing request to /api/generate-3d endpoint');
+        console.log('[DEBUG-3D] Request body:', JSON.stringify({ 
+          prompt: prompt,
+          imageUrl: imageUrl ? imageUrl.substring(0, 50) + '...' : null
+        }));
+        
+        console.log('[DEBUG-3D] Sending request to generate-3d API...');
+        const requestStartTime = Date.now();
         
         const response = await fetch('/api/generate-3d', {
           method: 'POST',
@@ -175,6 +207,7 @@ export default function ImageGenerator() {
           }),
           signal: controller.signal
         }).catch(fetchError => {
+          console.error('[DEBUG-3D] Fetch error caught:', fetchError);
           // Handle abort/timeout specifically
           if (fetchError.name === 'AbortError') {
             clearInterval(statusInterval);
@@ -183,19 +216,34 @@ export default function ImageGenerator() {
           throw fetchError;
         });
         
+        console.log(`[DEBUG-3D] Received response after ${((Date.now() - requestStartTime)/1000).toFixed(2)}s`);
+        
         // Clear tracking
         clearTimeout(timeoutId);
         clearInterval(statusInterval);
         
-        console.log('[Client] Received response:', response.status, response.statusText);
+        console.log('[DEBUG-3D] Response status:', response.status, response.statusText);
+        console.log('[DEBUG-3D] Response headers:', {
+          'content-type': response.headers.get('content-type'),
+          'content-length': response.headers.get('content-length')
+        });
 
         // For debugging - log non-2xx responses
         if (!response.ok) {
-          console.error(`[Client] Server error status: ${response.status}`);
+          console.error(`[DEBUG-3D] Server error status: ${response.status}`);
           try {
             // Try to extract detailed error information
-            const errorData = await response.json();
-            console.error('[Client] Server error details:', errorData);
+            const errorText = await response.text();
+            console.error('[DEBUG-3D] Error response body:', errorText);
+            
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+              console.error('[DEBUG-3D] Parsed error data:', errorData);
+            } catch (jsonError) {
+              console.error('[DEBUG-3D] Could not parse error response as JSON:', jsonError);
+              errorData = { error: errorText };
+            }
             
             // Check for timeout status
             if (response.status === 504) {
@@ -212,11 +260,15 @@ export default function ImageGenerator() {
             
             throw new Error(`Server responded with ${response.status}: ${errorData.error || response.statusText}`);
           } catch (parseError) {
+            console.error('[DEBUG-3D] Error handling response:', parseError);
             if (parseError instanceof Error && parseError.message.includes('currentStep')) {
               throw parseError; // Re-throw the parsed error with step info
             }
             // If we can't parse the response, just use the status text
-            const errorText = await response.text().catch(() => response.statusText);
+            const errorText = await response.text().catch((err) => {
+              console.error('[DEBUG-3D] Failed to read response text:', err);
+              return response.statusText;
+            });
             throw new Error(`Server responded with ${response.status}: ${errorText}`);
           }
         }
@@ -258,8 +310,7 @@ export default function ImageGenerator() {
       if (error instanceof Error) {
         if (error.message.includes('timed out') || error.message.includes('timeout')) {
           setModel3DError(
-            'The 3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes for complex images. ' +
-            'Please try again with a simpler prompt or image.'
+            '3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes to generate complex models. Please try again with a simpler prompt or image.'
           );
         } else {
           setModel3DError(error.message);
@@ -638,24 +689,26 @@ export default function ImageGenerator() {
                     </div>
                   </div>
                   
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-400 mb-4">
                     Transform your image into a detailed 3D model with Tencent&apos;s advanced Hunyuan3D-2 technology.
                   </p>
                   
                   <button
                     onClick={generate3DModel}
                     disabled={generating3D || !prompt.trim()}
-                    className="w-full btn-gradient text-white font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                    className={`${generating3D ? 'opacity-50 cursor-not-allowed' : ''} w-full btn-gradient text-white font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition-all`}
                   >
                     {generating3D ? (
                       <span className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Creating 3D Model...
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating 3D with Hunyuan3D-2...
                       </span>
-                    ) : 'Generate 3D Model'}
+                    ) : (
+                      <span className="flex items-center justify-center">
+                        <Box className="w-4 h-4 mr-2" />
+                        Generate 3D Model
+                      </span>
+                    )}
                   </button>
                   
                   {!prompt.trim() && (

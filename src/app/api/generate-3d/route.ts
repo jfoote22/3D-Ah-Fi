@@ -4,355 +4,303 @@ import Replicate from 'replicate';
 // Keep track of request count for debugging
 let requestCount = 0;
 
-// Use the actual Hunyuan3D-2 model from ndreca
+// Use the Hunyuan3D-2 model with exact ID
 const MODEL_ID = "ndreca/hunyuan3d-2:4ac0c7d1ef7e7dd58bf92364262597272dea79bfdb158b26027f54eb667f28b8";
 const MODEL_NAME = "Hunyuan3D-2";
 
-// Set timeout for the Replicate API call (in milliseconds)
-// We set this to slightly less than the Vercel function timeout to ensure we can handle gracefully
-const API_TIMEOUT_MS = 840000; // 840 seconds (14 minutes)
+// Create a map to store request start times
+const startTimes = new Map<string, number>();
 
-// Set a separate shorter timeout for initial connection to Replicate
-const INITIAL_CONNECTION_TIMEOUT_MS = 30000; // 30 seconds
-
-// Helper function to create a promise that rejects after a timeout
-function createTimeoutPromise(ms: number, message = `Operation timed out after ${ms / 1000} seconds`) {
-  return new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error(message));
-    }, ms);
-  });
+// Logger function for tracking progress with timestamps
+function logProgress(requestId: string, message: string) {
+  const elapsedTime = (Date.now() - (startTimes.get(requestId) || Date.now())) / 1000;
+  console.log(`[${new Date().toISOString()}][Request ${requestId}][${elapsedTime.toFixed(2)}s] ${message}`);
 }
 
-// Track start times for each request
-const startTimes = new Map<number, number>();
+// Function to validate image URL
+async function isImageUrlValid(url: string): Promise<boolean> {
+  try {
+    // Log if this is a Firebase Storage URL
+    const isFirebaseStorage = url.includes('firebasestorage.googleapis.com');
+    if (isFirebaseStorage) {
+      console.log(`Validating Firebase Storage image URL: ${url.substring(0, 50)}...`);
+      
+      // For Firebase Storage URLs, we need a more robust check
+      // Sometimes HEAD requests don't work well with Firebase Storage
+      try {
+        // Try a full GET request instead of HEAD for Firebase Storage
+        const response = await fetch(url, { 
+          method: 'GET',
+          headers: {
+            // Add a cache-control header to prevent caching issues
+            'Cache-Control': 'no-cache'
+          }
+        });
+        
+        if (!response.ok) {
+          console.error(`Firebase Storage image validation failed with status: ${response.status}`);
+          return false;
+        }
+        
+        // Check if content type is an image
+        const contentType = response.headers.get('content-type');
+        const isImage = contentType ? contentType.startsWith('image/') : false;
+        
+        if (isImage) {
+          console.log(`Successfully validated Firebase Storage image with content type: ${contentType}`);
+          return true;
+        } else {
+          console.error(`Firebase Storage URL content type is not an image: ${contentType}`);
+          return false;
+        }
+      } catch (firebaseError) {
+        console.error(`Error validating Firebase Storage image: ${firebaseError instanceof Error ? firebaseError.message : String(firebaseError)}`);
+        return false;
+      }
+    }
+    
+    // Standard validation for non-Firebase URLs
+    const response = await fetch(url, { method: 'HEAD' });
+    if (!response.ok) {
+      console.error(`Image URL validation failed with status: ${response.status}`);
+      return false;
+    }
+    
+    // Check if content type is an image
+    const contentType = response.headers.get('content-type');
+    const isImage = contentType ? contentType.startsWith('image/') : false;
+    return isImage;
+  } catch (error) {
+    console.error(`Error validating image URL: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
 
-// Add function to log progress with timestamps
-function logProgress(requestId: number, message: string) {
-  const timestamp = new Date().toISOString();
-  const elapsedTime = (Date.now() - (startTimes.get(requestId) || Date.now())) / 1000;
-  console.log(`[${timestamp}] [3D Request #${requestId}] [${elapsedTime.toFixed(2)}s] ${message}`);
+// Function to prepare image URL for Replicate
+async function prepareImageUrlForReplicate(url: string): Promise<string> {
+  // If it's a Firebase Storage URL, we may need to handle it specially
+  if (url.includes('firebasestorage.googleapis.com')) {
+    // Log the URL being processed
+    console.log(`Preparing Firebase Storage URL for Replicate: ${url.substring(0, 50)}...`);
+    
+    try {
+      // For Firebase Storage URLs, we'll try to fetch the image data and check it's valid
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache',
+          // Add a referer header to help with CORS
+          'Referer': 'https://app-3dah-fi.vercel.app/',
+          // Add more realistic headers like a browser would
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error(`Firebase Storage fetch failed with status: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to access Firebase Storage image: HTTP ${response.status}`);
+      }
+      
+      // Get content type
+      const contentType = response.headers.get('content-type');
+      console.log(`Firebase Storage image content type: ${contentType}`);
+      
+      // Verify it's an image by checking content type
+      if (!contentType || !contentType.startsWith('image/')) {
+        console.error(`Not an image content type: ${contentType}`);
+        throw new Error(`Firebase Storage URL is not an image: ${contentType || 'unknown content type'}`);
+      }
+      
+      console.log(`Firebase Storage image URL is valid and accessible`);
+      
+      // Return the original URL - it should be accessible to Replicate
+      return url;
+    } catch (error) {
+      console.error(`Error preparing Firebase Storage URL: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Failed to prepare image from Firebase Storage: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  // For non-Firebase URLs, just return as is
+  return url;
 }
 
 export async function POST(req: Request) {
-  requestCount++;
-  const currentRequest = requestCount;
-  const startTime = Date.now();
-  startTimes.set(currentRequest, startTime);
+  // Generate a unique ID for this request to track it in logs
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  startTimes.set(requestId, Date.now());
   
-  logProgress(currentRequest, "Starting 3D model generation request");
-  
-  // Set up structured response to send step by step updates (if needed)
-  let currentStep = "initialization";
+  logProgress(requestId, `Starting 3D model generation request`);
   
   try {
-    // First check if the API token is set before doing anything else
-    const apiToken = process.env.REPLICATE_API_TOKEN;
-    if (!apiToken) {
-      logProgress(currentRequest, "ERROR: Missing API token");
-      return NextResponse.json(
-        { error: "API configuration error: REPLICATE_API_TOKEN is not set" },
-        { status: 500 }
-      );
+    // Parse request body
+    const body = await req.json();
+    const { prompt, imageUrl } = body;
+    
+    logProgress(requestId, `Received request with prompt: "${prompt?.substring(0, 30)}..." and image URL`);
+    
+    // Identify source based on image URL
+    const isFromFirebaseStorage = imageUrl && imageUrl.includes('firebasestorage.googleapis.com');
+    
+    logProgress(requestId, `Request source: ${isFromFirebaseStorage ? 'Firebase Storage (stored image)' : 'Direct URL (new image)'}`);
+    
+    // Validate input
+    if (!imageUrl) {
+      logProgress(requestId, `Error: Missing image URL parameter`);
+      return NextResponse.json({ error: 'Missing image URL parameter' }, { status: 400 });
     }
     
-    // Verify token format (basic validation)
-    if (!apiToken.startsWith('r8_') && !apiToken.startsWith('test_')) {
-      logProgress(currentRequest, `ERROR: API token has invalid format: ${apiToken.substring(0, 4)}...`);
-      return NextResponse.json(
-        { error: "API configuration error: REPLICATE_API_TOKEN format is invalid" },
-        { status: 500 }
-      );
-    }
-    
-    logProgress(currentRequest, `API token found: ${apiToken.substring(0, 5)}...`);
-    currentStep = "parsing_request";
-    
-    // Validate request body
-    let reqBody;
-    try {
-      reqBody = await req.json();
-      logProgress(currentRequest, "Request body parsed successfully");
-    } catch (e) {
-      logProgress(currentRequest, `Failed to parse request body: ${e instanceof Error ? e.message : String(e)}`);
-      return NextResponse.json(
-        { error: 'Invalid request body' },
-        { status: 400 }
-      );
-    }
-
-    const { imageUrl, prompt } = reqBody;
-    currentStep = "validating_input";
-    
-    // Validate input parameters
-    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
-      logProgress(currentRequest, "Missing or invalid prompt");
-      return NextResponse.json(
-        { error: 'Prompt is required and must be a non-empty string' },
-        { status: 400 }
-      );
-    }
-    
-    // Log received parameters
-    if (imageUrl) {
-      logProgress(currentRequest, `Received image URL: "${imageUrl.substring(0, 30)}..."`);
+    // For Firebase Storage URLs, we'll skip the basic validation here and do thorough validation in prepareImageUrlForReplicate
+    if (!isFromFirebaseStorage) {
+      // Validate image URL only for non-Firebase URLs
+      logProgress(requestId, `Validating image URL: ${imageUrl.substring(0, 50)}...`);
+      const isValid = await isImageUrlValid(imageUrl);
+      if (!isValid) {
+        logProgress(requestId, `Error: Invalid or inaccessible image URL`);
+        return NextResponse.json({ 
+          error: 'The image URL provided is invalid or inaccessible. Please make sure the URL is directly accessible and is a valid image file.' 
+        }, { status: 400 });
+      }
     } else {
-      logProgress(currentRequest, "No image URL provided, will generate 3D model from prompt only");
-    }
-    logProgress(currentRequest, `Received prompt: "${prompt}"`);
-    
-    currentStep = "initializing_replicate";
-    
-    // Create input parameters based on example
-    const input: any = {
-      prompt: prompt
-    };
-    
-    // Only add image parameter if imageUrl is provided
-    if (imageUrl) {
-      input.image = imageUrl;
+      logProgress(requestId, `Skipping basic validation for Firebase Storage URL. Will handle in preparation step.`);
     }
     
-    logProgress(currentRequest, "Creating Replicate client");
-    const replicate = new Replicate({
-      auth: apiToken,
-    });
-
-    logProgress(currentRequest, `Calling Replicate with model ID: ${MODEL_ID}`);
-    logProgress(currentRequest, `Input parameters: ${JSON.stringify(input, null, 2)}`);
-    
-    currentStep = "connecting_to_replicate";
-    
-    // Test connection to Replicate with a short timeout first
-    // This helps detect early issues with authentication and connectivity
-    try {
-      logProgress(currentRequest, "Testing connection to Replicate API");
-      
-      // Create a Replicate API call with a short timeout
-      // We'll use a Promise.race between the connection test and a short timeout
-      const connectionTest = await Promise.race([
-        // Make a simple API call that should return quickly if the service is working
-        (async () => {
-          try {
-            const modelInfo = await replicate.models.get(MODEL_ID.split(':')[0], MODEL_ID.split(':')[1]);
-            return { success: true, model: modelInfo.name };
-          } catch (e) {
-            // If this is an auth error or model not found, we'll get a specific error
-            // which is helpful for troubleshooting
-            throw e;
-          }
-        })(),
-        createTimeoutPromise(INITIAL_CONNECTION_TIMEOUT_MS, "Initial connection to Replicate API timed out")
-      ]);
-      
-      logProgress(currentRequest, `Connection test successful: ${JSON.stringify(connectionTest)}`);
-      
-    } catch (connectionError) {
-      logProgress(currentRequest, `Connection test failed: ${connectionError instanceof Error ? connectionError.message : String(connectionError)}`);
-      
-      // Check for specific connection errors and provide better error messages
-      const errorMessage = connectionError instanceof Error ? connectionError.message : String(connectionError);
-      
-      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-        return NextResponse.json(
-          { 
-            error: 'Authentication failed. Please check your Replicate API token.',
-            details: errorMessage,
-            currentStep
-          },
-          { status: 401 }
-        );
-      } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
-        return NextResponse.json(
-          { 
-            error: 'Model not found. The Hunyuan3D-2 model may have been moved or renamed.',
-            details: errorMessage,
-            currentStep
-          },
-          { status: 404 }
-        );
-      } else if (errorMessage.includes('timed out')) {
-        return NextResponse.json(
-          { 
-            error: 'Connection to Replicate API timed out. The service may be experiencing issues.',
-            details: errorMessage,
-            isTimeout: true,
-            currentStep
-          },
-          { status: 504 }
-        );
-      }
-      
-      // Generic connection error
-      return NextResponse.json(
-        { 
-          error: 'Failed to connect to Replicate API',
-          details: errorMessage,
-          currentStep
-        },
-        { status: 500 }
-      );
+    // Set up Replicate client with API token
+    const token = process.env.REPLICATE_API_TOKEN;
+    if (!token) {
+      logProgress(requestId, `Error: Missing Replicate API token`);
+      return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 });
     }
     
-    currentStep = "calling_replicate";
-    
-    // Set up progress tracking for the API call
-    let lastStatusUpdate = Date.now();
-    const statusInterval = setInterval(() => {
-      const now = Date.now();
-      const elapsedSinceUpdate = (now - lastStatusUpdate) / 1000;
-      const totalElapsed = (now - startTime) / 1000;
-      logProgress(currentRequest, `Still waiting for Replicate response... (${elapsedSinceUpdate.toFixed(0)}s since last update, ${totalElapsed.toFixed(0)}s total)`);
-    }, 10000); // Log every 10 seconds
+    logProgress(requestId, `Initializing Replicate client...`);
     
     try {
-      // Race between the API call and a timeout
-      logProgress(currentRequest, `Starting Replicate API call with timeout of ${API_TIMEOUT_MS/1000}s`);
-      
-      const output = await Promise.race([
-        replicate.run(
-          MODEL_ID,
-          { input }
-        ),
-        createTimeoutPromise(API_TIMEOUT_MS)
-      ]);
-
-      // Stop progress tracking
-      clearInterval(statusInterval);
-      
-      logProgress(currentRequest, "Replicate API call completed successfully");
-      logProgress(currentRequest, `Output received: ${JSON.stringify(output)}`);
-      
-      currentStep = "processing_output";
-      
-      // Calculate generation time
-      const generationTime = (Date.now() - startTime) / 1000; // in seconds
-      
-      // Get the mesh URL from the output
-      let modelUrl;
-      if (typeof output === 'object' && output !== null && 'mesh' in output) {
-        modelUrl = (output as any).mesh;
-      } else if (Array.isArray(output) && output.length > 0) {
-        modelUrl = output[0];
-      } else {
-        modelUrl = String(output);
-      }
-      
-      // Verify the model URL looks valid
-      if (!modelUrl || typeof modelUrl !== 'string' || !modelUrl.startsWith('http')) {
-        logProgress(currentRequest, `Invalid model URL received: ${modelUrl}`);
-        return NextResponse.json(
-          { 
-            error: 'Invalid model URL received from Replicate API',
-            details: `Received: ${modelUrl}`,
-            currentStep
-          },
-          { status: 500 }
-        );
-      }
-      
-      logProgress(currentRequest, `3D model generated successfully in ${generationTime.toFixed(2)}s: ${modelUrl}`);
-      
-      // Return model URL and generation details
-      return NextResponse.json({
-        modelUrl,
-        generationTime,
-        sourceImageUrl: imageUrl || null,
-        prompt
+      // Create Replicate client
+      const replicate = new Replicate({
+        auth: token,
       });
       
-    } catch (replicateError) {
-      // Stop progress tracking
-      clearInterval(statusInterval);
+      logProgress(requestId, `Starting model prediction with ${MODEL_NAME}`);
       
-      logProgress(currentRequest, `Replicate API error: ${replicateError instanceof Error ? replicateError.message : String(replicateError)}`);
+      // Using simpler format, just passing the image URL in the input object
+      const input = {
+        image: imageUrl
+      };
       
-      // Detailed logging of error response if available
-      if (replicateError && (replicateError as any).response) {
-        try {
-          logProgress(currentRequest, `Error response: ${JSON.stringify((replicateError as any).response, null, 2)}`);
-        } catch (e) {
-          logProgress(currentRequest, "Could not stringify error response");
+      logProgress(requestId, `Processing image URL before sending to Replicate`);
+      
+      // Prepare the image URL for Replicate
+      try {
+        const preparedUrl = await prepareImageUrlForReplicate(imageUrl);
+        
+        // Update input with prepared URL
+        input.image = preparedUrl;
+        logProgress(requestId, `Image URL processed successfully`);
+      } catch (prepError) {
+        logProgress(requestId, `Error preparing image URL: ${prepError instanceof Error ? prepError.message : String(prepError)}`);
+        return NextResponse.json({ 
+          error: `Failed to prepare image for processing: ${prepError instanceof Error ? prepError.message : String(prepError)}` 
+        }, { status: 400 });
+      }
+      
+      logProgress(requestId, `Sending request to Replicate with prepared input`);
+      
+      const output = await replicate.run(MODEL_ID, { input });
+      
+      // Log the raw output for debugging
+      logProgress(requestId, `Generation completed! Raw output: ${JSON.stringify(output)}`);
+      
+      // Process the output - Hunyuan3D-2 returns an object with a mesh property
+      if (!output) {
+        throw new Error("Model returned empty output");
+      }
+      
+      // Extract the model URL
+      let modelUrl: string | undefined;
+      
+      if (typeof output === 'object' && output !== null) {
+        const outputObj = output as Record<string, unknown>;
+        
+        // Check for mesh property first (expected from Hunyuan3D-2)
+        if (outputObj.mesh && typeof outputObj.mesh === 'string') {
+          modelUrl = outputObj.mesh;
+        } 
+        // Fallbacks if mesh property isn't present
+        else if (outputObj.glb && typeof outputObj.glb === 'string') {
+          modelUrl = outputObj.glb;
+        } 
+        else if (outputObj.output && typeof outputObj.output === 'string') {
+          modelUrl = outputObj.output;
+        }
+      }
+      // If output is a string URL directly
+      else if (typeof output === 'string') {
+        modelUrl = output;
+      }
+      // If output is an array with URLs
+      else if (Array.isArray(output)) {
+        const outputArray = output as unknown[];
+        if (outputArray.length > 0 && typeof outputArray[0] === 'string') {
+          modelUrl = outputArray[0] as string;
         }
       }
       
-      // Check for specific error types and provide helpful messages
-      const errorMessage = replicateError instanceof Error ? replicateError.message : String(replicateError);
-      
-      // Handle timeout specifically
-      if (errorMessage.includes('timed out')) {
-        logProgress(currentRequest, `Request timed out after ${API_TIMEOUT_MS/1000} seconds`);
-        return NextResponse.json(
-          { 
-            error: '3D model generation is taking longer than expected. Please try again with a simpler prompt or image.',
-            timeoutDetails: `The operation timed out after ${API_TIMEOUT_MS/1000} seconds. The Hunyuan3D-2 model requires significant processing time.`,
-            isTimeout: true,
-            currentStep
-          },
-          { status: 504 }
-        );
-      } else if (errorMessage.includes('402') || errorMessage.includes('Payment Required')) {
-        return NextResponse.json(
-          { 
-            error: 'Payment required for this model. Please set up billing on Replicate.',
-            details: errorMessage,
-            currentStep 
-          },
-          { status: 402 }
-        );
-      } else if (errorMessage.includes('422') || errorMessage.includes('Invalid version')) {
-        return NextResponse.json(
-          { 
-            error: 'Invalid Hunyuan3D-2 model version. Please try again with different parameters.',
-            details: errorMessage,
-            currentStep
-          },
-          { status: 422 }
-        );
-      } else if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-        return NextResponse.json(
-          { 
-            error: 'Rate limit exceeded. Please try again later.',
-            details: errorMessage,
-            currentStep
-          },
-          { status: 429 }
-        );
+      // Check if we found a valid URL
+      if (!modelUrl) {
+        throw new Error(`Model returned output but no valid URL was found: ${JSON.stringify(output)}`);
       }
       
-      // Generic error case
-      return NextResponse.json(
-        { 
-          error: `Error calling Replicate API: ${errorMessage}`,
-          currentStep 
-        },
-        { status: 500 }
-      );
+      logProgress(requestId, `Extracted model URL: ${modelUrl}`);
+      
+      // Clean up the start time
+      startTimes.delete(requestId);
+      
+      // Return the modelUrl
+      return NextResponse.json({ modelUrl });
+      
+    } catch (error: any) {
+      logProgress(requestId, `Error using Replicate client: ${error.message}`);
+      
+      // Check if error response contains details
+      if (error.response) {
+        try {
+          logProgress(requestId, `Error response: ${JSON.stringify(error.response)}`);
+        } catch (e) {
+          logProgress(requestId, `Could not stringify error response`);
+        }
+      }
+      
+      // Check for specific error messages
+      const errorMsg = error.message.toLowerCase();
+      if (errorMsg.includes('invalid version') || errorMsg.includes('not permitted')) {
+        return NextResponse.json({ 
+          error: 'The 3D model is not available. This could be due to API access restrictions or the model has been removed from Replicate.'
+        }, { status: 422 });
+      } else if (errorMsg.includes('not found')) {
+        return NextResponse.json({ 
+          error: 'The image or resource could not be processed. Please try a different image or prompt.'
+        }, { status: 400 });
+      } else if (errorMsg.includes('firebase') || errorMsg.includes('storage')) {
+        return NextResponse.json({ 
+          error: 'There was an issue accessing your stored image. This could be due to permissions or the image is no longer available. Try generating a new image.'
+        }, { status: 400 });
+      } else if (errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
+        return NextResponse.json({ 
+          error: 'The 3D generation process timed out. The Hunyuan3D-2 model requires 2-3 minutes for complex models. Try again with a simpler image.'
+        }, { status: 408 });
+      }
+      
+      return NextResponse.json({ 
+        error: `Failed with Replicate client: ${error.message}` 
+      }, { status: 500 });
     }
-  } catch (error) {
-    logProgress(currentRequest, `Unexpected error generating 3D model: ${error instanceof Error ? error.message : String(error)}`);
+  } catch (error: any) {
+    logProgress(requestId, `Unexpected error: ${error.message}`);
     
-    // Check if the error is a timeout from Vercel
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
-      return NextResponse.json(
-        { 
-          error: '3D model generation timed out. Hunyuan3D-2 takes 2-3 minutes to generate models.',
-          details: 'Please try again with a simpler prompt or image. Complex images may require more processing time.',
-          isTimeout: true,
-          currentStep
-        },
-        { status: 504 }
-      );
-    }
+    // Clean up the start time
+    startTimes.delete(requestId);
     
-    return NextResponse.json(
-      { 
-        error: 'An unexpected error occurred while generating the 3D model',
-        details: errorMessage,
-        currentStep
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `Internal server error: ${error.message}` }, { status: 500 });
   }
 } 
