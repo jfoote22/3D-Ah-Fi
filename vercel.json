@@ -7,11 +7,11 @@
   "functions": {
     "src/app/api/generate-3d/route.ts": {
       "memory": 1024,
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "src/app/api/generate-image/route.ts": {
       "memory": 1024,
-      "maxDuration": 30
+      "maxDuration": 60
     }
   }
 } 

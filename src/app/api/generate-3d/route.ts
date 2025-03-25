@@ -1,21 +1,26 @@
 import { NextResponse } from 'next/server';
 import Replicate from 'replicate';
+import { v4 as uuidv4 } from 'uuid';
 
-// Keep track of request count for debugging
-let requestCount = 0;
+// Initialize Replicate client
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
-// Use the Hunyuan3D-2 model with exact ID
+// Model configuration
 const MODEL_ID = "ndreca/hunyuan3d-2:4ac0c7d1ef7e7dd58bf92364262597272dea79bfdb158b26027f54eb667f28b8";
 const MODEL_NAME = "Hunyuan3D-2";
 
-// Create a map to store request start times
-const startTimes = new Map<string, number>();
+// Track request start times for debugging
+const requestStartTimes = new Map<string, number>();
 
-// Logger function for tracking progress with timestamps
-function logProgress(requestId: string, message: string) {
-  const elapsedTime = (Date.now() - (startTimes.get(requestId) || Date.now())) / 1000;
-  console.log(`[${new Date().toISOString()}][Request ${requestId}][${elapsedTime.toFixed(2)}s] ${message}`);
-}
+// Logger function for consistent logging
+const logProgress = (requestId: string, message: string, data?: any) => {
+  const elapsedTime = requestStartTimes.has(requestId) 
+    ? ((Date.now() - requestStartTimes.get(requestId)!) / 1000).toFixed(2)
+    : '0.00';
+  console.log(`[${MODEL_NAME}-${requestId}] [${elapsedTime}s] ${message}`, data || '');
+};
 
 // Function to validate image URL
 async function isImageUrlValid(url: string): Promise<boolean> {
@@ -126,181 +131,143 @@ async function prepareImageUrlForReplicate(url: string): Promise<string> {
   return url;
 }
 
-export async function POST(req: Request) {
-  // Generate a unique ID for this request to track it in logs
-  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  startTimes.set(requestId, Date.now());
-  
-  logProgress(requestId, `Starting 3D model generation request`);
+export async function POST(request: Request) {
+  const requestId = uuidv4();
+  requestStartTimes.set(requestId, Date.now());
   
   try {
-    // Parse request body
-    const body = await req.json();
+    logProgress(requestId, 'Starting 3D model generation request');
+    
+    const body = await request.json();
     const { prompt, imageUrl } = body;
     
-    logProgress(requestId, `Received request with prompt: "${prompt?.substring(0, 30)}..." and image URL`);
-    
-    // Identify source based on image URL
-    const isFromFirebaseStorage = imageUrl && imageUrl.includes('firebasestorage.googleapis.com');
-    
-    logProgress(requestId, `Request source: ${isFromFirebaseStorage ? 'Firebase Storage (stored image)' : 'Direct URL (new image)'}`);
-    
-    // Validate input
+    logProgress(requestId, 'Request body:', { 
+      prompt: prompt ? prompt.substring(0, 50) + '...' : 'none',
+      imageUrl: imageUrl ? imageUrl.substring(0, 50) + '...' : 'none'
+    });
+
     if (!imageUrl) {
-      logProgress(requestId, `Error: Missing image URL parameter`);
-      return NextResponse.json({ error: 'Missing image URL parameter' }, { status: 400 });
+      logProgress(requestId, 'Error: No image URL provided');
+      return NextResponse.json(
+        { error: 'Please provide an image URL' },
+        { status: 400 }
+      );
     }
-    
-    // For Firebase Storage URLs, we'll skip the basic validation here and do thorough validation in prepareImageUrlForReplicate
-    if (!isFromFirebaseStorage) {
-      // Validate image URL only for non-Firebase URLs
-      logProgress(requestId, `Validating image URL: ${imageUrl.substring(0, 50)}...`);
-      const isValid = await isImageUrlValid(imageUrl);
-      if (!isValid) {
-        logProgress(requestId, `Error: Invalid or inaccessible image URL`);
-        return NextResponse.json({ 
-          error: 'The image URL provided is invalid or inaccessible. Please make sure the URL is directly accessible and is a valid image file.' 
-        }, { status: 400 });
-      }
-    } else {
-      logProgress(requestId, `Skipping basic validation for Firebase Storage URL. Will handle in preparation step.`);
-    }
-    
-    // Set up Replicate client with API token
-    const token = process.env.REPLICATE_API_TOKEN;
-    if (!token) {
-      logProgress(requestId, `Error: Missing Replicate API token`);
-      return NextResponse.json({ error: 'Replicate API token not configured' }, { status: 500 });
-    }
-    
-    logProgress(requestId, `Initializing Replicate client...`);
-    
+
+    // Validate image URL
     try {
-      // Create Replicate client
-      const replicate = new Replicate({
-        auth: token,
-      });
-      
-      logProgress(requestId, `Starting model prediction with ${MODEL_NAME}`);
-      
-      // Using simpler format, just passing the image URL in the input object
-      const input = {
-        image: imageUrl
-      };
-      
-      logProgress(requestId, `Processing image URL before sending to Replicate`);
-      
-      // Prepare the image URL for Replicate
-      try {
-        const preparedUrl = await prepareImageUrlForReplicate(imageUrl);
-        
-        // Update input with prepared URL
-        input.image = preparedUrl;
-        logProgress(requestId, `Image URL processed successfully`);
-      } catch (prepError) {
-        logProgress(requestId, `Error preparing image URL: ${prepError instanceof Error ? prepError.message : String(prepError)}`);
-        return NextResponse.json({ 
-          error: `Failed to prepare image for processing: ${prepError instanceof Error ? prepError.message : String(prepError)}` 
-        }, { status: 400 });
+      const url = new URL(imageUrl);
+      if (!url.protocol.startsWith('http')) {
+        throw new Error('Invalid protocol');
       }
-      
-      logProgress(requestId, `Sending request to Replicate with prepared input`);
-      
-      const output = await replicate.run(MODEL_ID, { input });
-      
-      // Log the raw output for debugging
-      logProgress(requestId, `Generation completed! Raw output: ${JSON.stringify(output)}`);
-      
-      // Process the output - Hunyuan3D-2 returns an object with a mesh property
-      if (!output) {
-        throw new Error("Model returned empty output");
-      }
-      
-      // Extract the model URL
-      let modelUrl: string | undefined;
-      
-      if (typeof output === 'object' && output !== null) {
-        const outputObj = output as Record<string, unknown>;
-        
-        // Check for mesh property first (expected from Hunyuan3D-2)
-        if (outputObj.mesh && typeof outputObj.mesh === 'string') {
-          modelUrl = outputObj.mesh;
-        } 
-        // Fallbacks if mesh property isn't present
-        else if (outputObj.glb && typeof outputObj.glb === 'string') {
-          modelUrl = outputObj.glb;
-        } 
-        else if (outputObj.output && typeof outputObj.output === 'string') {
-          modelUrl = outputObj.output;
-        }
-      }
-      // If output is a string URL directly
-      else if (typeof output === 'string') {
-        modelUrl = output;
-      }
-      // If output is an array with URLs
-      else if (Array.isArray(output)) {
-        const outputArray = output as unknown[];
-        if (outputArray.length > 0 && typeof outputArray[0] === 'string') {
-          modelUrl = outputArray[0] as string;
-        }
-      }
-      
-      // Check if we found a valid URL
-      if (!modelUrl) {
-        throw new Error(`Model returned output but no valid URL was found: ${JSON.stringify(output)}`);
-      }
-      
-      logProgress(requestId, `Extracted model URL: ${modelUrl}`);
-      
-      // Clean up the start time
-      startTimes.delete(requestId);
-      
-      // Return the modelUrl
-      return NextResponse.json({ modelUrl });
-      
-    } catch (error: any) {
-      logProgress(requestId, `Error using Replicate client: ${error.message}`);
-      
-      // Check if error response contains details
-      if (error.response) {
-        try {
-          logProgress(requestId, `Error response: ${JSON.stringify(error.response)}`);
-        } catch (e) {
-          logProgress(requestId, `Could not stringify error response`);
-        }
-      }
-      
-      // Check for specific error messages
-      const errorMsg = error.message.toLowerCase();
-      if (errorMsg.includes('invalid version') || errorMsg.includes('not permitted')) {
-        return NextResponse.json({ 
-          error: 'The 3D model is not available. This could be due to API access restrictions or the model has been removed from Replicate.'
-        }, { status: 422 });
-      } else if (errorMsg.includes('not found')) {
-        return NextResponse.json({ 
-          error: 'The image or resource could not be processed. Please try a different image or prompt.'
-        }, { status: 400 });
-      } else if (errorMsg.includes('firebase') || errorMsg.includes('storage')) {
-        return NextResponse.json({ 
-          error: 'There was an issue accessing your stored image. This could be due to permissions or the image is no longer available. Try generating a new image.'
-        }, { status: 400 });
-      } else if (errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
-        return NextResponse.json({ 
-          error: 'The 3D generation process timed out. The Hunyuan3D-2 model requires 2-3 minutes for complex models. Try again with a simpler image.'
-        }, { status: 408 });
-      }
-      
-      return NextResponse.json({ 
-        error: `Failed with Replicate client: ${error.message}` 
-      }, { status: 500 });
+    } catch (error) {
+      logProgress(requestId, 'Error: Invalid image URL', error);
+      return NextResponse.json(
+        { error: 'Invalid image URL provided' },
+        { status: 400 }
+      );
     }
-  } catch (error: any) {
-    logProgress(requestId, `Unexpected error: ${error.message}`);
+
+    // Initialize Replicate client
+    if (!process.env.REPLICATE_API_TOKEN) {
+      logProgress(requestId, 'Error: Missing Replicate API token');
+      return NextResponse.json(
+        { error: 'Server configuration error: Missing Replicate API token' },
+        { status: 500 }
+      );
+    }
+
+    logProgress(requestId, 'Starting model prediction');
+    const startTime = Date.now();
+
+    // Prepare image URL for Replicate
+    let processedImageUrl = imageUrl;
+    if (imageUrl.includes('firebasestorage.googleapis.com')) {
+      // For Firebase Storage URLs, we need to ensure they're publicly accessible
+      processedImageUrl = imageUrl.split('?')[0];
+    }
+
+    // Start the model prediction
+    const output = await replicate.run(
+      MODEL_ID,
+      {
+        input: {
+          image: processedImageUrl,
+          prompt: prompt || "A detailed 3D model",
+          negative_prompt: "blurry, low quality, distorted, deformed",
+          num_inference_steps: 50,
+          guidance_scale: 7.5,
+          width: 512,
+          height: 512,
+          num_frames: 16,
+          fps: 8,
+          motion_bucket_id: 127,
+          cond_aug: 0.02,
+          decoding_t: 7,
+          seed: -1
+        }
+      }
+    );
+
+    const generationTime = (Date.now() - startTime) / 1000;
+    logProgress(requestId, `Model prediction completed in ${generationTime.toFixed(2)}s`);
+
+    if (!output || typeof output !== 'object') {
+      logProgress(requestId, 'Error: Invalid output from model', output);
+      return NextResponse.json(
+        { error: 'Invalid response from model generation service' },
+        { status: 500 }
+      );
+    }
+
+    // Process the output
+    const modelUrl = Array.isArray(output) ? output[0] : output;
     
-    // Clean up the start time
-    startTimes.delete(requestId);
+    if (!modelUrl || typeof modelUrl !== 'string') {
+      logProgress(requestId, 'Error: No model URL in output', output);
+      return NextResponse.json(
+        { error: 'No model URL returned from generation service' },
+        { status: 500 }
+      );
+    }
+
+    logProgress(requestId, 'Successfully generated 3D model', {
+      modelUrl: modelUrl.substring(0, 50) + '...',
+      generationTime: generationTime.toFixed(2) + 's'
+    });
+
+    // Clean up
+    requestStartTimes.delete(requestId);
+
+    return NextResponse.json({
+      modelUrl,
+      generationTime: generationTime.toFixed(2)
+    });
+
+  } catch (error) {
+    logProgress(requestId, 'Error during model generation:', error);
     
-    return NextResponse.json({ error: `Internal server error: ${error.message}` }, { status: 500 });
+    // Clean up
+    requestStartTimes.delete(requestId);
+
+    // Handle specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('timeout')) {
+        return NextResponse.json(
+          { error: 'Model generation timed out. Please try again with a simpler prompt or image.' },
+          { status: 504 }
+        );
+      }
+      
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'An unexpected error occurred during model generation' },
+      { status: 500 }
+    );
   }
 } 
