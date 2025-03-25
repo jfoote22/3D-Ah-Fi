@@ -187,6 +187,12 @@ export async function POST(request: Request) {
       processedImageUrl = imageUrl.split('?')[0];
     }
 
+    logProgress(requestId, 'Sending request to Replicate with parameters:', {
+      modelId: MODEL_ID,
+      imageUrl: processedImageUrl.substring(0, 50) + '...',
+      prompt: prompt || "A detailed 3D model"
+    });
+
     // Start the model prediction
     const output = await replicate.run(
       MODEL_ID,
@@ -252,6 +258,14 @@ export async function POST(request: Request) {
 
     // Handle specific error types
     if (error instanceof Error) {
+      // Log detailed error information
+      console.error(`[${MODEL_NAME}-${requestId}] Detailed error:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause
+      });
+
       if (error.message.includes('timeout')) {
         return NextResponse.json(
           { error: 'Model generation timed out. Please try again with a simpler prompt or image.' },
@@ -259,8 +273,22 @@ export async function POST(request: Request) {
         );
       }
       
+      if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        return NextResponse.json(
+          { error: 'Authentication failed with Replicate API. Please check your API token.' },
+          { status: 401 }
+        );
+      }
+
+      if (error.message.includes('402') || error.message.includes('payment required')) {
+        return NextResponse.json(
+          { error: 'Payment required for this model. Please check your Replicate account.' },
+          { status: 402 }
+        );
+      }
+      
       return NextResponse.json(
-        { error: error.message },
+        { error: `Model generation failed: ${error.message}` },
         { status: 500 }
       );
     }
