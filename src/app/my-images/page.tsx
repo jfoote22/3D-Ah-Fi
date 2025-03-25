@@ -542,7 +542,7 @@ export default function MyImages() {
                           {!selectedImage.modelUrl ? (
                             <>
                               <p className="text-sm text-slate-400 mb-4">
-                                Transform this image into a detailed 3D model with Tencent's advanced Hunyuan3D-2 technology.
+                                Transform this image into a detailed 3D model with Tencent&apos;s advanced Hunyuan3D-2 technology.
                               </p>
                               
                               <button
