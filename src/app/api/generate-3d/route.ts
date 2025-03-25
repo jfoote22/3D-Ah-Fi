@@ -8,8 +8,8 @@ const replicate = new Replicate({
 });
 
 // Model configuration
-const MODEL_ID = "tencent/hunyuan3d-2:6bca40a7e3b5b797317d734c06f6c0b7f3140a58";
-const MODEL_NAME = "Hunyuan3D-2";
+const MODEL_ID = "tencent/hunyuan3d-2mv:71798fbc3c9f7b7097e3bb85496e5a797d8b8f616b550692e7c3e176a8e9e5db";
+const MODEL_NAME = "Hunyuan3D-2MV";
 
 // Track request start times for debugging
 const requestStartTimes = new Map<string, number>();
@@ -197,15 +197,41 @@ export async function POST(request: Request) {
     });
 
     // Log the exact parameters being sent to Replicate for debugging
-    const replicateParams = {
-      prompt: prompt || "A detailed 3D model",
-      image: processedImageUrl,
-      texture_resolution: 1024,
-      shape_resolution: 512,
-      guidance_scale: 7.5,
-      num_inference_steps: 50,
-      seed: -1
+    const replicateParams: {
+      front_image: string;
+      left_image: string;
+      back_image: string;
+      seed: number;
+      steps: number;
+      file_type: string;
+      num_chunks: number;
+      guidance_scale: number;
+      randomize_seed: boolean;
+      target_face_num: number;
+      octree_resolution: number;
+      remove_background: boolean;
+      prompt?: string;
+    } = {
+      front_image: processedImageUrl,
+      // Since we only have one image, we'll use the same image for all views
+      // In a real multi-view scenario, you'd want different angles of the same object
+      left_image: processedImageUrl,
+      back_image: processedImageUrl,
+      seed: 1234,
+      steps: 30,
+      file_type: "glb",
+      num_chunks: 200000,
+      guidance_scale: 5,
+      randomize_seed: true,
+      target_face_num: 10000,
+      octree_resolution: 256,
+      remove_background: true
     };
+
+    // Add prompt if provided
+    if (prompt) {
+      replicateParams.prompt = prompt;
+    }
     
     logProgress(requestId, 'Full Replicate parameters:', replicateParams);
 
@@ -239,18 +265,27 @@ export async function POST(request: Request) {
       // Process the output - handle different possible response formats
       let modelUrl: string | null = null;
       
-      if (Array.isArray(output) && output.length > 0) {
-        // Format 1: Array of URLs
+      if (typeof output === 'string') {
+        // Format 1: Direct string URL
+        modelUrl = output;
+        logProgress(requestId, 'Output is directly a string URL');
+      } else if (Array.isArray(output) && output.length > 0) {
+        // Format 2: Array with URL as first element
         modelUrl = output[0];
         logProgress(requestId, 'Extracted model URL from array output');
       } else if (typeof output === 'object' && output !== null) {
-        // Format 2: Object with URL property
-        // Check various possible properties where the URL might be
-        if ('url' in output && typeof output.url === 'string') {
+        // Format 3: Object with specific properties
+        if ('glb' in output && typeof output.glb === 'string') {
+          modelUrl = output.glb;
+          logProgress(requestId, 'Extracted model URL from output.glb property');
+        } else if ('model' in output && typeof output.model === 'string') {
+          modelUrl = output.model;
+          logProgress(requestId, 'Extracted model URL from output.model property');
+        } else if ('url' in output && typeof output.url === 'string') {
           modelUrl = output.url;
-          logProgress(requestId, 'Extracted model URL from object.url property');
+          logProgress(requestId, 'Extracted model URL from output.url property');
         } else if ('output' in output) {
-          // Format 3: Object with output property which might be an array or string
+          // Format 4: Object with output property which might be an array or string
           const innerOutput = output.output;
           if (Array.isArray(innerOutput) && innerOutput.length > 0) {
             modelUrl = innerOutput[0];
@@ -258,15 +293,13 @@ export async function POST(request: Request) {
           } else if (typeof innerOutput === 'string') {
             modelUrl = innerOutput;
             logProgress(requestId, 'Extracted model URL from object.output string');
+          } else if (typeof innerOutput === 'object' && innerOutput !== null) {
+            if ('glb' in innerOutput && typeof innerOutput.glb === 'string') {
+              modelUrl = innerOutput.glb;
+              logProgress(requestId, 'Extracted model URL from output.output.glb property');
+            }
           }
-        } else if ('model' in output && typeof output.model === 'string') {
-          modelUrl = output.model;
-          logProgress(requestId, 'Extracted model URL from object.model property');
         }
-      } else if (typeof output === 'string') {
-        // Format 4: Direct string URL
-        modelUrl = output;
-        logProgress(requestId, 'Output is directly a string URL');
       }
       
       // Log the full output for debugging
