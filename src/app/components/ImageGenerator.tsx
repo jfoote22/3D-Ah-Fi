@@ -28,6 +28,7 @@ interface ModelGenerationResponse {
   generationTime?: number;
   sourceImageUrl?: string;
   prompt?: string;
+  error?: string;
 }
 
 interface SavedImage {
@@ -63,6 +64,9 @@ export default function ImageGenerator() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,151 +162,45 @@ export default function ImageGenerator() {
 
   // Function to generate 3D model from the current image
   const generate3DModel = async () => {
-    if (!prompt || !prompt.trim()) {
-      setModel3DError('Please provide a prompt for 3D model generation');
+    if (!imageUrl) {
+      setModel3DError('Please generate an image first');
       return;
     }
 
     setGenerating3D(true);
     setModel3DError('');
-    setModelUrl('');
-    setModelGenerationTime(null);
+    setServerError(null);
 
     try {
-      console.log('[DEBUG-3D] Starting 3D model generation with prompt:', prompt);
-      console.log('[DEBUG-3D] Image URL:', imageUrl ? imageUrl.substring(0, 50) + '...' : 'none');
+      console.log('Starting 3D model generation with image:', imageUrl);
       
-      // Add timeout to fetch request - note this is a client-side timeout
-      // The server also has its own timeout handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.log('[DEBUG-3D] Client-side timeout triggered after 5 minutes');
-        controller.abort();
-      }, 300000); // 5 minute timeout
-      const startTime = Date.now();
+      const response = await fetch('/api/generate-3d', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl,
+          prompt: prompt || "A detailed 3D model"
+        }),
+      });
+
+      const data: ModelGenerationResponse = await response.json();
       
-      // Status tracking for debugging
-      let lastStatusLog = Date.now();
-      const statusInterval = setInterval(() => {
-        const elapsedTime = (Date.now() - startTime) / 1000;
-        console.log(`[DEBUG-3D] Still waiting for 3D model after ${elapsedTime.toFixed(0)} seconds...`);
-      }, 5000); // Log every 5 seconds
-
-      try {
-        console.log('[DEBUG-3D] Preparing request to /api/generate-3d endpoint');
-        console.log('[DEBUG-3D] Request body:', JSON.stringify({ 
-          prompt: prompt,
-          imageUrl: imageUrl ? imageUrl.substring(0, 50) + '...' : null
-        }));
-        
-        console.log('[DEBUG-3D] Sending request to generate-3d API...');
-        const requestStartTime = Date.now();
-        
-        const response = await fetch('/api/generate-3d', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            prompt: prompt,
-            imageUrl: imageUrl // Optional for Hunyuan3D-2, but including for context
-          }),
-          signal: controller.signal
-        }).catch(fetchError => {
-          console.error('[DEBUG-3D] Fetch error caught:', fetchError);
-          // Handle abort/timeout specifically
-          if (fetchError.name === 'AbortError') {
-            clearInterval(statusInterval);
-            throw new Error('Request timed out. 3D model generation takes time, please try again with a simpler prompt or image.');
-          }
-          throw fetchError;
-        });
-        
-        console.log(`[DEBUG-3D] Received response after ${((Date.now() - requestStartTime)/1000).toFixed(2)}s`);
-        
-        // Clear tracking
-        clearTimeout(timeoutId);
-        clearInterval(statusInterval);
-        
-        console.log('[DEBUG-3D] Response status:', response.status, response.statusText);
-        console.log('[DEBUG-3D] Response headers:', {
-          'content-type': response.headers.get('content-type'),
-          'content-length': response.headers.get('content-length')
-        });
-
-        // For debugging - log non-2xx responses
-        if (!response.ok) {
-          console.error(`[DEBUG-3D] Server error status: ${response.status}`);
-          try {
-            // Try to extract detailed error information
-            const errorText = await response.text();
-            console.error('[DEBUG-3D] Error response body:', errorText);
-            
-            let errorData;
-            try {
-              errorData = JSON.parse(errorText);
-              console.error('[DEBUG-3D] Parsed error data:', errorData);
-            } catch (jsonError) {
-              console.error('[DEBUG-3D] Could not parse error response as JSON:', jsonError);
-              errorData = { error: errorText };
-            }
-            
-            // Check for timeout status
-            if (response.status === 504) {
-              throw new Error(
-                errorData.error || 
-                '3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes to generate complex models. Please try again with a simpler prompt or image.'
-              );
-            }
-            
-            // If we have detailed error with currentStep, show it to help debugging
-            if (errorData.currentStep) {
-              throw new Error(`Error during ${errorData.currentStep}: ${errorData.error || 'Unknown error'}`);
-            }
-            
-            throw new Error(`Server responded with ${response.status}: ${errorData.error || response.statusText}`);
-          } catch (parseError) {
-            console.error('[DEBUG-3D] Error handling response:', parseError);
-            if (parseError instanceof Error && parseError.message.includes('currentStep')) {
-              throw parseError; // Re-throw the parsed error with step info
-            }
-            // If we can't parse the response, just use the status text
-            const errorText = await response.text().catch((err) => {
-              console.error('[DEBUG-3D] Failed to read response text:', err);
-              return response.statusText;
-            });
-            throw new Error(`Server responded with ${response.status}: ${errorText}`);
-          }
-        }
-
-        console.log('[Client] Parsing response JSON...');
-        const data = await response.json() as ModelGenerationResponse;
-        console.log('[Client] 3D generation response:', data);
-
-        if ('error' in data) {
-          throw new Error(data.error as string);
-        }
-
-        if (!data.modelUrl) {
-          throw new Error('No model URL returned from the server');
-        }
-
-        setModelUrl(data.modelUrl);
-        if (data.generationTime) {
-          setModelGenerationTime(data.generationTime);
-        }
-        
-        // Set success message
-        setModel3DSuccess('3D model generated successfully!');
-        
-        // Clear success message after 5 seconds
-        setTimeout(() => {
-          setModel3DSuccess('');
-        }, 5000);
-        
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        clearInterval(statusInterval);
-        throw fetchError;
+      if (!response.ok) {
+        console.error('Server error response:', data);
+        setModel3DError(data.error || 'Failed to generate 3D model');
+        setServerError(data.error || 'An unknown error occurred');
+        setShowErrorDialog(true);
+        return;
       }
+
+      if (!data.modelUrl) {
+        throw new Error('No model URL in response');
+      }
+
+      setModelUrl(data.modelUrl);
+      console.log('3D model generated successfully:', data.modelUrl);
     } catch (error) {
       console.error('Error generating 3D model:', error);
       
@@ -315,9 +213,12 @@ export default function ImageGenerator() {
         } else {
           setModel3DError(error.message);
         }
+        setServerError(error.message);
       } else {
         setModel3DError('Failed to generate 3D model');
+        setServerError('An unexpected error occurred');
       }
+      setShowErrorDialog(true);
     } finally {
       setGenerating3D(false);
     }
@@ -809,6 +710,51 @@ export default function ImageGenerator() {
       {/* Add floating decorative elements */}
       <div className="absolute -bottom-10 right-20 w-20 h-20 bg-blue-500/20 rounded-lg rotate-12 opacity-30 z-0"></div>
       <div className="absolute top-40 -left-10 w-16 h-16 bg-purple-500/20 rounded-lg rotate-45 opacity-30 z-0"></div>
+
+      {/* Error Dialog */}
+      {showErrorDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl border border-slate-700">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-semibold text-red-400">Error Details</h3>
+              <button
+                onClick={() => setShowErrorDialog(false)}
+                className="text-slate-400 hover:text-slate-300"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-slate-900/50 rounded-lg p-4">
+                <p className="text-slate-300 font-mono text-sm whitespace-pre-wrap">
+                  {serverError || 'No error details available'}
+                </p>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowErrorDialog(false)}
+                  className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowErrorDialog(false);
+                    setServerError(null);
+                  }}
+                  className="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors"
+                >
+                  Clear Error
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
