@@ -8,8 +8,8 @@ const replicate = new Replicate({
 });
 
 // Model configuration
-const MODEL_ID = "ndreca/hunyuan3d-2:4ac0c7d1ef7e7dd58bf92364262597272dea79bfdb158b26027f54eb667f28b8";
-const MODEL_NAME = "Hunyuan3D-2";
+const MODEL_ID = "cjwbw/shap-e:5957069d5c509126a73c7f749a99d6d2f7d2eaf3d3af8e92a3816cc12c56a8fe";
+const MODEL_NAME = "Shap-E";
 
 // Track request start times for debugging
 const requestStartTimes = new Map<string, number>();
@@ -177,6 +177,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Skip explicit token validation, we'll catch auth errors in the main API call
+    logProgress(requestId, 'Using Replicate API token provided in environment variables');
+
     logProgress(requestId, 'Starting model prediction');
     const startTime = Date.now();
 
@@ -193,62 +196,174 @@ export async function POST(request: Request) {
       prompt: prompt || "A detailed 3D model"
     });
 
-    // Start the model prediction
-    const output = await replicate.run(
-      MODEL_ID,
-      {
-        input: {
-          image: processedImageUrl,
-          prompt: prompt || "A detailed 3D model",
-          negative_prompt: "blurry, low quality, distorted, deformed",
-          num_inference_steps: 50,
-          guidance_scale: 7.5,
-          width: 512,
-          height: 512,
-          num_frames: 16,
-          fps: 8,
-          motion_bucket_id: 127,
-          cond_aug: 0.02,
-          decoding_t: 7,
-          seed: -1
-        }
-      }
-    );
-
-    const generationTime = (Date.now() - startTime) / 1000;
-    logProgress(requestId, `Model prediction completed in ${generationTime.toFixed(2)}s`);
-
-    if (!output || typeof output !== 'object') {
-      logProgress(requestId, 'Error: Invalid output from model', output);
-      return NextResponse.json(
-        { error: 'Invalid response from model generation service' },
-        { status: 500 }
-      );
-    }
-
-    // Process the output
-    const modelUrl = Array.isArray(output) ? output[0] : output;
+    // Log the exact parameters being sent to Replicate for debugging
+    const replicateParams = {
+      prompt: prompt || "A detailed 3D model",
+      image: processedImageUrl,
+      scheduler: "ddim",
+      num_inference_steps: 64,
+      guidance_scale: 15.0,
+      seed: -1
+    };
     
-    if (!modelUrl || typeof modelUrl !== 'string') {
-      logProgress(requestId, 'Error: No model URL in output', output);
+    logProgress(requestId, 'Full Replicate parameters:', replicateParams);
+
+    // Start the model prediction
+    try {
+      const output = await replicate.run(
+        MODEL_ID,
+        {
+          input: replicateParams
+        }
+      );
+
+      logProgress(requestId, 'Received response from Replicate:', {
+        outputType: typeof output,
+        isArray: Array.isArray(output),
+        outputLength: Array.isArray(output) ? output.length : 'N/A',
+        outputPreview: typeof output === 'object' ? JSON.stringify(output).substring(0, 200) : String(output).substring(0, 200)
+      });
+
+      const generationTime = (Date.now() - startTime) / 1000;
+      logProgress(requestId, `Model prediction completed in ${generationTime.toFixed(2)}s`);
+
+      if (!output) {
+        logProgress(requestId, 'Error: No output from Replicate');
+        return NextResponse.json(
+          { error: 'No output returned from model generation service' },
+          { status: 500 }
+        );
+      }
+
+      // Process the output - handle different possible response formats
+      let modelUrl: string | null = null;
+      
+      if (Array.isArray(output) && output.length > 0) {
+        // Format 1: Array of URLs
+        modelUrl = output[0];
+        logProgress(requestId, 'Extracted model URL from array output');
+      } else if (typeof output === 'object' && output !== null) {
+        // Format 2: Object with URL property
+        // Check various possible properties where the URL might be
+        if ('url' in output && typeof output.url === 'string') {
+          modelUrl = output.url;
+          logProgress(requestId, 'Extracted model URL from object.url property');
+        } else if ('output' in output) {
+          // Format 3: Object with output property which might be an array or string
+          const innerOutput = output.output;
+          if (Array.isArray(innerOutput) && innerOutput.length > 0) {
+            modelUrl = innerOutput[0];
+            logProgress(requestId, 'Extracted model URL from object.output array');
+          } else if (typeof innerOutput === 'string') {
+            modelUrl = innerOutput;
+            logProgress(requestId, 'Extracted model URL from object.output string');
+          }
+        } else if ('model' in output && typeof output.model === 'string') {
+          modelUrl = output.model;
+          logProgress(requestId, 'Extracted model URL from object.model property');
+        }
+      } else if (typeof output === 'string') {
+        // Format 4: Direct string URL
+        modelUrl = output;
+        logProgress(requestId, 'Output is directly a string URL');
+      }
+      
+      // Log the full output for debugging
+      console.log(`[${MODEL_NAME}-${requestId}] Full Replicate output:`, JSON.stringify(output, null, 2));
+      
+      if (!modelUrl) {
+        logProgress(requestId, 'Error: Could not extract model URL from output', output);
+        return NextResponse.json(
+          { error: 'No model URL found in the response from generation service', 
+            details: JSON.stringify(output) },
+          { status: 500 }
+        );
+      }
+
+      // Validate the model URL format
+      try {
+        new URL(modelUrl);
+      } catch (urlError) {
+        logProgress(requestId, 'Error: Invalid model URL format', modelUrl);
+        return NextResponse.json(
+          { error: 'Invalid model URL format in response', 
+            details: modelUrl },
+          { status: 500 }
+        );
+      }
+
+      logProgress(requestId, 'Successfully generated 3D model', {
+        modelUrl: modelUrl.substring(0, 50) + '...',
+        generationTime: generationTime.toFixed(2) + 's'
+      });
+
+      // Clean up
+      requestStartTimes.delete(requestId);
+
+      return NextResponse.json({
+        modelUrl,
+        generationTime: generationTime.toFixed(2)
+      });
+    } catch (replicateError) {
+      logProgress(requestId, 'Error during Replicate API call:', {
+        error: replicateError instanceof Error ? {
+          name: replicateError.name,
+          message: replicateError.message,
+          stack: replicateError.stack,
+          cause: replicateError.cause
+        } : replicateError
+      });
+
+      // Handle specific error types
+      if (replicateError instanceof Error) {
+        const errorMessage = replicateError.message.toLowerCase();
+        
+        if (errorMessage.includes('timeout')) {
+          return NextResponse.json(
+            { error: 'Model generation timed out. Please try again with a simpler prompt or image.' },
+            { status: 504 }
+          );
+        }
+        
+        if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
+          return NextResponse.json(
+            { error: 'Authentication failed with Replicate API. Please check your API token.' },
+            { status: 401 }
+          );
+        }
+
+        if (errorMessage.includes('402') || errorMessage.includes('payment required')) {
+          return NextResponse.json(
+            { error: 'Payment required for this model. Please check your Replicate account.' },
+            { status: 402 }
+          );
+        }
+
+        if (errorMessage.includes('422') || errorMessage.includes('invalid version')) {
+          return NextResponse.json(
+            { error: 'Invalid model version or not permitted to use this model.' },
+            { status: 422 }
+          );
+        }
+
+        if (errorMessage.includes('429') || errorMessage.includes('too many requests')) {
+          return NextResponse.json(
+            { error: 'Rate limit exceeded. Please try again later.' },
+            { status: 429 }
+          );
+        }
+        
+        return NextResponse.json(
+          { error: `Model generation failed: ${replicateError.message}` },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json(
-        { error: 'No model URL returned from generation service' },
+        { error: 'An unexpected error occurred during model generation' },
         { status: 500 }
       );
     }
-
-    logProgress(requestId, 'Successfully generated 3D model', {
-      modelUrl: modelUrl.substring(0, 50) + '...',
-      generationTime: generationTime.toFixed(2) + 's'
-    });
-
-    // Clean up
-    requestStartTimes.delete(requestId);
-
-    return NextResponse.json({
-      modelUrl,
-      generationTime: generationTime.toFixed(2)
-    });
 
   } catch (error) {
     logProgress(requestId, 'Error during model generation:', error);
