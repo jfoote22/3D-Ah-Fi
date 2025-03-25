@@ -8,8 +8,8 @@ const replicate = new Replicate({
 });
 
 // Model configuration
-const MODEL_ID = "cjwbw/shap-e:5957069d5c509126a73c7f749a99d6d2f7d2eaf3d3af8e92a3816cc12c56a8fe";
-const MODEL_NAME = "Shap-E";
+const MODEL_ID = "ndreca/hunyuan3d-2:4ac0c7d1ef7e7dd58bf92364262597272dea79bfdb158b26027f54eb667f28b8";
+const MODEL_NAME = "Hunyuan3D-2";
 
 // Track request start times for debugging
 const requestStartTimes = new Map<string, number>();
@@ -200,9 +200,8 @@ export async function POST(request: Request) {
     const replicateParams = {
       prompt: prompt || "A detailed 3D model",
       image: processedImageUrl,
-      scheduler: "ddim",
-      num_inference_steps: 64,
-      guidance_scale: 15.0,
+      num_inference_steps: 50,
+      guidance_scale: 7.5,
       seed: -1
     };
     
