@@ -8,7 +8,7 @@ const replicate = new Replicate({
 });
 
 // Model configuration
-const MODEL_ID = "ndreca/hunyuan3d-2:4ac0c7d1ef7e7dd58bf92364262597272dea79bfdb158b26027f54eb667f28b8";
+const MODEL_ID = "tencent/hunyuan3d-2:6bca40a7e3b5b797317d734c06f6c0b7f3140a58";
 const MODEL_NAME = "Hunyuan3D-2";
 
 // Track request start times for debugging
@@ -200,8 +200,10 @@ export async function POST(request: Request) {
     const replicateParams = {
       prompt: prompt || "A detailed 3D model",
       image: processedImageUrl,
-      num_inference_steps: 50,
+      texture_resolution: 1024,
+      shape_resolution: 512,
       guidance_scale: 7.5,
+      num_inference_steps: 50,
       seed: -1
     };
     
