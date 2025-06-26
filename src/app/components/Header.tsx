@@ -94,14 +94,14 @@ export default function Header() {
               Home
             </Link>
             <Link 
-              href="/my-images" 
+              href="/my-models" 
               className={`text-sm font-medium transition-colors ${
-                pathname === '/my-images' 
+                pathname === '/my-models' 
                   ? 'text-blue-400' 
                   : 'text-slate-300 hover:text-blue-400'
               }`}
             >
-              My Images
+              My Models
             </Link>
           </nav>
 
@@ -143,11 +143,11 @@ export default function Header() {
                   </div>
                   <div>
                     <Link 
-                      href="/my-images"
+                      href="/my-models"
                       className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
                       onClick={() => setProfileMenuOpen(false)}
                     >
-                      My Images
+                      My Models
                     </Link>
                     <button
                       className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-slate-700 transition-colors"
@@ -192,11 +192,11 @@ export default function Header() {
               Home
             </Link>
             <Link
-              href="/my-images"
+              href="/my-models"
               className="block px-4 py-2 text-base font-medium text-slate-300 hover:bg-slate-800 transition-colors"
               onClick={() => setMenuOpen(false)}
             >
-              My Images
+              My Models
             </Link>
             <button
               className="block w-full text-left px-4 py-2 text-base font-medium text-red-400 hover:bg-slate-800 transition-colors"
