@@ -12,22 +12,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const { prompt } = await request.json();
+  const { prompt, aspect_ratio = "1:1" } = await request.json();
 
   try {
-    const output = await replicate.run(
-      "stability-ai/stable-diffusion:db21e45d3f7023abc2a46ee38a23973f6dce16bb082a930b0c49861f96d1e5bf",
-      {
-        input: {
-          prompt: prompt,
-          image_dimensions: "512x512",
-          num_outputs: 1,
-          num_inference_steps: 50,
-          guidance_scale: 7.5,
-          scheduler: "DPMSolverMultistep",
-        },
-      }
-    );
+    const output = await replicate.run("google/imagen-4-fast", {
+      input: {
+        prompt: prompt,
+        aspect_ratio: aspect_ratio, // Can be "1:1", "4:3", "3:4", "16:9", "9:16"
+      },
+    });
 
     return NextResponse.json({ output }, { status: 200 });
   } catch (error) {

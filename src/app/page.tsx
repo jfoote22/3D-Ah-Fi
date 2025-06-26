@@ -80,7 +80,7 @@ export default function Home() {
             {/* Tech badges */}
             <div className="flex flex-wrap justify-center gap-2 mt-6">
               <span className="px-3 py-1 text-xs bg-slate-800 text-blue-400 border border-blue-900/50 rounded">
-                Stable Diffusion
+                Google/Imagen-4
               </span>
               <span className="px-3 py-1 text-xs bg-slate-800 text-purple-400 border border-purple-900/50 rounded">
                 Hunyuan3D-2

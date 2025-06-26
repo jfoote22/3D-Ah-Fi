@@ -224,15 +224,9 @@ export default function ImageGenerator() {
     }
   };
 
-  // Function to save the image to Firebase
+  // Function to save the image locally (bypass Firebase completely)
   const saveImageToFirebase = async () => {
-    console.log('Starting saveImageToFirebase function');
-    
-    if (!user) {
-      console.error('Cannot save: No authenticated user');
-      setSaveError('Cannot save image. Please log in first.');
-      return;
-    }
+    console.log('Starting saveImageToFirebase function (using local storage)');
     
     if (!imageUrl) {
       console.error('Cannot save: No image URL available');
@@ -251,51 +245,37 @@ export default function ImageGenerator() {
     setSaveError('');
 
     try {
-      console.log('Creating unique filename for image');
-      // Create a unique filename
-      const timestamp = new Date().getTime();
-      const filename = `images/${user.uid}/${timestamp}_${prompt.substring(0, 30).replace(/[^a-z0-9]/gi, '_')}.jpg`;
+      console.log('Saving image to local storage...');
       
-      // Convert imageUrl to blob if it's a remote URL or upload directly if it's a data URL
-      let downloadUrl = '';
-      
-      if (imageUrl.startsWith('data:')) {
-        console.log('Image is a data URL, uploading to Firebase Storage');
-        // It's a data URL, upload directly
-        const imageStorageRef = storageRef(storage, filename);
-        const snapshot = await uploadString(imageStorageRef, imageUrl, 'data_url');
-        downloadUrl = await getDownloadURL(snapshot.ref);
-        console.log('Image uploaded to Firebase Storage successfully, URL:', downloadUrl.substring(0, 50) + '...');
-      } else {
-        console.log('Image is a remote URL, storing the URL directly:', imageUrl.substring(0, 50) + '...');
-        // It's a remote URL, we'll store the URL directly
-        downloadUrl = imageUrl;
-      }
-      
-      console.log('Preparing image metadata for Firestore');
-      // Store image metadata in Firestore - make sure to properly handle potentially undefined fields
-      const savedImage: SavedImage = {
-        imageUrl: downloadUrl,
+      // Create image data object
+      const imageData = {
+        id: Date.now().toString(),
+        imageUrl,
         prompt,
-        createdAt: serverTimestamp(),
-        userId: user.uid
+        modelUrl: modelUrl || undefined,
+        userId: user?.uid || 'anonymous',
+        createdAt: new Date().toISOString()
       };
       
-      // Only add modelUrl if it exists and is not empty
-      if (modelUrl) {
-        savedImage.modelUrl = modelUrl;
-      }
+      // Get existing images from localStorage
+      const existingImages = JSON.parse(localStorage.getItem('saved-images') || '[]');
       
-      console.log('Saving image metadata to Firestore with fields:', Object.keys(savedImage));
-      await addDoc(collection(db, 'images'), savedImage);
-      console.log('Image metadata saved to Firestore successfully');
+      // Add new image to the beginning of the array
+      existingImages.unshift(imageData);
       
+      // Keep only the last 50 images to avoid storage bloat
+      const limitedImages = existingImages.slice(0, 50);
+      
+      // Save back to localStorage
+      localStorage.setItem('saved-images', JSON.stringify(limitedImages));
+      
+      console.log('Image saved successfully to local storage:', imageData.id);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000); // Clear success message after 3 seconds
+      
     } catch (error) {
       console.error('Error saving image:', error);
       if (error instanceof Error) {
-        console.error('Error details:', error.message);
         setSaveError(`Failed to save image: ${error.message}`);
       } else {
         setSaveError('Failed to save image. Please try again.');
@@ -493,7 +473,7 @@ export default function ImageGenerator() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
                   <div className="space-y-1">
                     <p className="text-slate-400">Model</p>
-                    <p className="font-medium text-slate-300">{imageDetails?.model || 'Stable Diffusion'}</p>
+                    <p className="font-medium text-slate-300">{imageDetails?.model || 'Google/Imagen-4'}</p>
                   </div>
                   
                   <div className="space-y-1">

@@ -5,9 +5,9 @@ import Replicate from 'replicate';
 let requestCount = 0;
 
 // Model info - keeping it as a constant for reference
-// Updated to use Stable Diffusion XL 3.5 model
-const MODEL_ID = "stability-ai/sdxl:c221b2b8ef527988fb59bf24a8b97c4561f1c671f73bd389f866bfb27c061316";
-const MODEL_NAME = "Stable Diffusion XL 3.5";
+// Updated to use Google Imagen-4-Fast model
+const MODEL_ID = "google/imagen-4-fast";
+const MODEL_NAME = "Google Imagen-4-Fast";
 
 export async function POST(req: Request) {
   requestCount++;
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { prompt } = reqBody;
+    const { prompt, aspect_ratio = "1:1" } = reqBody;
     
     // Validate prompt
     if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
@@ -61,45 +61,28 @@ export async function POST(req: Request) {
 
       console.log(`[DEBUG][Request #${currentRequest}] Generating image for prompt: "${prompt}"`);
       
-      // Define generation parameters - optimized for SDXL 3.5
-      const width = 1024;
-      const height = 1024;
-      const inferenceSteps = 25;
-      const guidanceScale = 7.5;
-      
       // Start timing
       const startTime = Date.now();
       
-      // Prepare input params for debugging
+      // Prepare input params for debugging - optimized for Imagen-4-Fast
       const inputParams = {
         prompt,
-        width,
-        height,
-        num_outputs: 1,
-        num_inference_steps: inferenceSteps,
-        guidance_scale: guidanceScale,
-        apply_watermark: false,
-        scheduler: "K_EULER"
+        aspect_ratio: aspect_ratio // Can be "1:1", "4:3", "3:4", "16:9", "9:16"
       };
       console.log(`[DEBUG][Request #${currentRequest}] Input parameters:`, inputParams);
       
-      // Use Stable Diffusion XL 3.5 model
+      // Use Google Imagen-4-Fast model
       let output;
       try {
         console.log(`[DEBUG][Request #${currentRequest}] Calling Replicate API with model ID: ${MODEL_ID}`);
-        output = await replicate.run(
-          MODEL_ID,
-          {
-            input: inputParams
-          }
-        ) as string[];
+        output = await replicate.run(MODEL_ID, {
+          input: inputParams
+        }) as unknown as string;
         
         console.log(`[DEBUG][Request #${currentRequest}] Replicate API call successful`);
-        if (Array.isArray(output)) {
-          console.log(`[DEBUG][Request #${currentRequest}] Received ${output.length} outputs, first output prefix:`, 
-            output[0]?.substring(0, 50) + '...');
-        } else {
-          console.log(`[DEBUG][Request #${currentRequest}] Output is not an array:`, typeof output);
+        console.log(`[DEBUG][Request #${currentRequest}] Received output type:`, typeof output);
+        if (typeof output === 'string') {
+          console.log(`[DEBUG][Request #${currentRequest}] Output URL prefix:`, output.substring(0, 50) + '...');
         }
       } catch (replicateError) {
         console.error(`[DEBUG][Request #${currentRequest}] Replicate API error:`, replicateError);
@@ -141,8 +124,8 @@ export async function POST(req: Request) {
         );
       }
       
-      // Validate output
-      if (!output || !Array.isArray(output) || output.length === 0 || typeof output[0] !== 'string') {
+      // Validate output for Imagen-4-Fast (returns single string URL)
+      if (!output || typeof output !== 'string') {
         console.error(`[DEBUG][Request #${currentRequest}] Invalid output from Replicate:`, output);
         return NextResponse.json(
           { error: 'Received invalid response from image generation service' },
@@ -157,13 +140,10 @@ export async function POST(req: Request) {
       
       // Return image URL and generation details
       return NextResponse.json({
-        imageUrl: output[0],
+        imageUrl: output,
         model: MODEL_NAME,
         modelId: MODEL_ID,
-        width,
-        height,
-        inferenceSteps,
-        guidanceScale,
+        aspect_ratio: aspect_ratio,
         generationTime,
         prompt
       });

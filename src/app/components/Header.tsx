@@ -25,8 +25,12 @@ export default function Header() {
   }, []);
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/login');
+    try {
+      await signOut();
+      router.push('/login');
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    }
   };
 
   // Prevent event propagation to avoid closing menu when clicking on menu items
@@ -34,10 +38,37 @@ export default function Header() {
     e.stopPropagation();
   };
 
-  if (loading) return null;
+  // Show loading state
+  if (loading) {
+    return (
+      <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-lg border-b border-slate-800 shadow-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center">
+              <span className="text-2xl font-bold gradient-text">3D-Ah-Fi</span>
+            </div>
+            <div className="text-slate-400">Loading...</div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
-  // If user is not authenticated, don't show the header
-  if (!user) return null;
+  // If user is not authenticated, show minimal header
+  if (!user) {
+    return (
+      <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-lg border-b border-slate-800 shadow-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center">
+              <span className="text-2xl font-bold gradient-text">3D-Ah-Fi</span>
+            </div>
+            <div className="text-slate-400">Not authenticated</div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-lg border-b border-slate-800 shadow-md">
