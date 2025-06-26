@@ -185,7 +185,21 @@ export default function ImageGenerator() {
         }),
       });
 
-      const data: ModelGenerationResponse = await response.json();
+      let data: ModelGenerationResponse;
+      
+      // Get the response text first to handle both JSON and plain text responses
+      const responseText = await response.text();
+      
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('Failed to parse response as JSON:', jsonError);
+        console.error('Raw error response:', responseText);
+        setModel3DError('Invalid response from server. Please try again.');
+        setServerError(`Server returned invalid JSON: ${responseText.substring(0, 100)}...`);
+        setShowErrorDialog(true);
+        return;
+      }
       
       if (!response.ok) {
         console.error('Server error response:', data);
