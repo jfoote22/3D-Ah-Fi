@@ -220,9 +220,13 @@ export default function ImageGenerator() {
       
       // Handle different types of errors with user-friendly messages
       if (error instanceof Error) {
-        if (error.message.includes('timed out') || error.message.includes('timeout')) {
+        if (error.message.includes('timed out') || error.message.includes('timeout') || error.message.includes('FUNCTION_INVOCATION_TIMEOUT')) {
           setModel3DError(
-            '3D model generation timed out. The Hunyuan3D-2 model requires 2-3 minutes to generate complex models. Please try again with a simpler prompt or image.'
+            '3D model generation timed out due to Vercel platform limits (45 seconds). Please try again - the model parameters have been optimized for faster generation.'
+          );
+        } else if (error.message.includes('invalid JSON') || error.message.includes('Server returned invalid JSON')) {
+          setModel3DError(
+            'The 3D generation service encountered an error. This is likely due to platform timeout limits. Please try again.'
           );
         } else {
           setModel3DError(error.message);

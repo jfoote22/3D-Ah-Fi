@@ -218,13 +218,13 @@ export async function POST(request: Request) {
       left_image: processedImageUrl,
       back_image: processedImageUrl,
       seed: 1234,
-      steps: 30,
+      steps: 20, // Reduced from 30 to 20 for faster generation
       file_type: "glb",
-      num_chunks: 200000,
+      num_chunks: 100000, // Reduced from 200000 to 100000 for faster processing
       guidance_scale: 5,
       randomize_seed: true,
-      target_face_num: 10000,
-      octree_resolution: 256,
+      target_face_num: 5000, // Reduced from 10000 to 5000 for faster generation
+      octree_resolution: 128, // Reduced from 256 to 128 for faster processing
       remove_background: true
     };
 
