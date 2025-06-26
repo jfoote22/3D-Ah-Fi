@@ -21,6 +21,11 @@ interface ImageGenerationResponse {
   guidanceScale?: number;
   generationTime?: number;
   prompt?: string;
+  aspect_ratio?: string;
+  numberOfImages?: number;
+  seed?: number | null;
+  negativePrompt?: string | null;
+  personGeneration?: string;
 }
 
 interface ModelGenerationResponse {
@@ -53,7 +58,22 @@ export default function ImageGenerator() {
   const [detailedError, setDetailedError] = useState('');
   const [imageKey, setImageKey] = useState(0); // Used to force image refresh
   const [imageDetails, setImageDetails] = useState<ImageGenerationResponse | null>(null);
-  
+
+  // Advanced parameter states
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+  const [numberOfImages, setNumberOfImages] = useState(1);
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [personGeneration, setPersonGeneration] = useState('allow_adult');
+  const [useRandomSeed, setUseRandomSeed] = useState(true);
+  const [seed, setSeed] = useState<number | null>(null);
+
+  // Creative control states
+  const [showStyleButtons, setShowStyleButtons] = useState(false);
+  const [showPhotographyControls, setShowPhotographyControls] = useState(false);
+  const [qualityLevel, setQualityLevel] = useState('standard');
+  const [creativityLevel, setCreativityLevel] = useState('balanced');
+
   // For 3D model generation
   const [modelUrl, setModelUrl] = useState('');
   const [generating3D, setGenerating3D] = useState(false);
@@ -97,10 +117,23 @@ export default function ImageGenerator() {
 
       try {
         console.log('[DEBUG] Sending fetch request to /api/generate-image');
+        
+        // Prepare request body with advanced parameters
+        const requestBody = {
+          prompt,
+          aspect_ratio: aspectRatio,
+          numberOfImages,
+          ...(negativePrompt && { negativePrompt }),
+          ...(personGeneration !== 'allow_adult' && { personGeneration }),
+          ...(!useRandomSeed && seed !== null && { seed })
+        };
+        
+        console.log('[DEBUG] Request body:', requestBody);
+        
         const response = await fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal
         });
 
@@ -329,6 +362,11 @@ export default function ImageGenerator() {
   const handleRegenerate = () => {
     console.log('Regenerate button clicked');
     if (prompt.trim()) {
+      // Force a new seed if using random seed
+      if (useRandomSeed) {
+        setSeed(Math.floor(Math.random() * 1000000));
+      }
+      
       // Create a synthetic form event that can be safely passed to handleSubmit
       const syntheticEvent = {
         preventDefault: () => {},
@@ -336,6 +374,13 @@ export default function ImageGenerator() {
       
       handleSubmit(syntheticEvent);
     }
+  };
+
+  // Function to generate a random seed
+  const generateRandomSeed = () => {
+    const newSeed = Math.floor(Math.random() * 1000000);
+    setSeed(newSeed);
+    setUseRandomSeed(false);
   };
 
   return (
@@ -371,6 +416,337 @@ export default function ImageGenerator() {
               className="w-full p-4 bg-slate-900 border border-slate-700 rounded-lg shadow-inner focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-100 relative z-10 placeholder-slate-500"
               rows={3}
             />
+          </div>
+
+          {/* Advanced Controls */}
+          <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedControls(!showAdvancedControls)}
+              className="flex items-center justify-between w-full text-slate-300 hover:text-white transition-colors"
+            >
+              <span className="font-medium flex items-center">
+                <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                </svg>
+                Advanced Controls
+              </span>
+              <svg className={`w-4 h-4 transition-transform ${showAdvancedControls ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {showAdvancedControls && (
+              <div className="space-y-6">
+                {/* Quick Style Tags */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-slate-300">Quick Style Tags</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowStyleButtons(!showStyleButtons)}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      {showStyleButtons ? 'Hide' : 'Show'} Styles
+                    </button>
+                  </div>
+                  {showStyleButtons && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {[
+                        { label: 'Photorealistic', tag: 'photorealistic, 4K HDR' },
+                        { label: 'Oil Painting', tag: 'oil painting style' },
+                        { label: 'Watercolor', tag: 'watercolor painting' },
+                        { label: 'Digital Art', tag: 'digital art, concept art' },
+                        { label: 'Anime Style', tag: 'anime style, manga' },
+                        { label: 'Vintage Photo', tag: 'vintage photography, film grain' },
+                        { label: 'Minimalist', tag: 'minimalist, clean, simple' },
+                        { label: 'Cyberpunk', tag: 'cyberpunk, neon, futuristic' },
+                        { label: 'Fantasy Art', tag: 'fantasy art, magical' },
+                        { label: 'Pop Art', tag: 'pop art, bold colors' },
+                        { label: 'Impressionist', tag: 'impressionist painting style' },
+                        { label: 'Art Deco', tag: 'art deco style, geometric' }
+                      ].map((style) => (
+                        <button
+                          key={style.label}
+                          type="button"
+                          onClick={() => setPrompt(prev => prev + (prev ? ', ' : '') + style.tag)}
+                          className="px-3 py-2 text-xs bg-slate-800 text-slate-300 rounded-md hover:bg-slate-700 hover:text-white transition-colors border border-slate-600"
+                        >
+                          {style.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Photography Controls */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-slate-300">Photography Modifiers</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPhotographyControls(!showPhotographyControls)}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      {showPhotographyControls ? 'Hide' : 'Show'} Camera
+                    </button>
+                  </div>
+                  {showPhotographyControls && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-slate-400 mb-1 block">Camera Angle</label>
+                          <div className="grid grid-cols-2 gap-1">
+                            {['close-up', 'wide shot', 'aerial view', 'from below'].map((angle) => (
+                              <button
+                                key={angle}
+                                type="button"
+                                onClick={() => setPrompt(prev => prev + (prev ? ', ' : '') + angle)}
+                                className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700"
+                              >
+                                {angle}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-400 mb-1 block">Lighting</label>
+                          <div className="grid grid-cols-2 gap-1">
+                            {['golden hour', 'dramatic lighting', 'soft lighting', 'neon lighting'].map((light) => (
+                              <button
+                                key={light}
+                                type="button"
+                                onClick={() => setPrompt(prev => prev + (prev ? ', ' : '') + light)}
+                                className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700"
+                              >
+                                {light}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-400 mb-1 block">Lens Type</label>
+                          <div className="grid grid-cols-2 gap-1">
+                            {['macro lens', 'wide angle', 'fisheye', '35mm'].map((lens) => (
+                              <button
+                                key={lens}
+                                type="button"
+                                onClick={() => setPrompt(prev => prev + (prev ? ', ' : '') + lens)}
+                                className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700"
+                              >
+                                {lens}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quality & Creativity Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Quality Level</label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { value: 'standard', label: 'Standard' },
+                        { value: 'high', label: 'High Quality', tag: '4K, HDR, professional' },
+                        { value: 'ultra', label: 'Ultra HD', tag: '8K, ultra detailed, masterpiece' }
+                      ].map((quality) => (
+                        <button
+                          key={quality.value}
+                          type="button"
+                          onClick={() => {
+                            setQualityLevel(quality.value);
+                            if (quality.tag) {
+                              setPrompt(prev => prev + (prev ? ', ' : '') + quality.tag);
+                            }
+                          }}
+                          className={`px-3 py-2 text-xs rounded-md transition-colors border ${
+                            qualityLevel === quality.value
+                              ? 'bg-blue-600 text-white border-blue-500'
+                              : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+                          }`}
+                        >
+                          {quality.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Creative Style</label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { value: 'realistic', label: 'Realistic', tag: 'photorealistic, natural' },
+                        { value: 'balanced', label: 'Balanced' },
+                        { value: 'artistic', label: 'Artistic', tag: 'creative, stylized, artistic' }
+                      ].map((creativity) => (
+                        <button
+                          key={creativity.value}
+                          type="button"
+                          onClick={() => {
+                            setCreativityLevel(creativity.value);
+                            if (creativity.tag) {
+                              setPrompt(prev => prev + (prev ? ', ' : '') + creativity.tag);
+                            }
+                          }}
+                          className={`px-3 py-2 text-xs rounded-md transition-colors border ${
+                            creativityLevel === creativity.value
+                              ? 'bg-purple-600 text-white border-purple-500'
+                              : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+                          }`}
+                        >
+                          {creativity.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Material & Texture Quick Tags */}
+                <div>
+                  <label className="text-sm font-medium text-slate-300 mb-2 block">Materials & Effects</label>
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                    {[
+                      'made of glass',
+                      'made of metal',
+                      'made of wood',
+                      'glowing',
+                      'transparent',
+                      'reflective',
+                      'textured',
+                      'smooth',
+                      'crystalline',
+                      'organic',
+                      'geometric',
+                      'flowing'
+                    ].map((material) => (
+                      <button
+                        key={material}
+                        type="button"
+                        onClick={() => setPrompt(prev => prev + (prev ? ', ' : '') + material)}
+                        className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700 hover:text-white transition-colors border border-slate-600"
+                      >
+                        {material}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Existing aspect ratio, number of images, etc. controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Aspect Ratio</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: '1:1', label: 'Square', desc: '1024×1024' },
+                        { value: '4:3', label: 'Landscape', desc: '1152×896' },
+                        { value: '3:4', label: 'Portrait', desc: '896×1152' },
+                        { value: '16:9', label: 'Wide', desc: '1344×768' },
+                        { value: '9:16', label: 'Tall', desc: '768×1344' }
+                      ].map((ratio) => (
+                        <button
+                          key={ratio.value}
+                          type="button"
+                          onClick={() => setAspectRatio(ratio.value)}
+                          className={`p-2 text-xs rounded-md transition-colors border ${
+                            aspectRatio === ratio.value
+                              ? 'bg-blue-600 text-white border-blue-500'
+                              : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+                          }`}
+                        >
+                          <div className="font-medium">{ratio.label}</div>
+                          <div className="text-xs opacity-75">{ratio.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Number of Images</label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setNumberOfImages(num)}
+                          className={`flex-1 py-2 text-sm rounded-md transition-colors border ${
+                            numberOfImages === num
+                              ? 'bg-green-600 text-white border-green-500'
+                              : 'bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Negative Prompt */}
+                <div>
+                  <label className="text-sm font-medium text-slate-300 mb-2 block">
+                    Negative Prompt
+                    <span className="text-xs text-slate-400 ml-2">(What to avoid)</span>
+                  </label>
+                  <textarea
+                    value={negativePrompt}
+                    onChange={(e) => setNegativePrompt(e.target.value)}
+                    placeholder="e.g., blurry, low quality, distorted, ugly..."
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Person Generation & Seed Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Person Generation</label>
+                    <select
+                      value={personGeneration}
+                      onChange={(e) => setPersonGeneration(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="allow_adult">Allow Adults</option>
+                      <option value="allow_minor">Allow Minors</option>
+                      <option value="block_all">Block All People</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Seed Control</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setUseRandomSeed(!useRandomSeed)}
+                        className={`px-3 py-2 text-xs rounded-md transition-colors border ${
+                          useRandomSeed
+                            ? 'bg-orange-600 text-white border-orange-500'
+                            : 'bg-slate-800 text-slate-300 border-slate-600'
+                        }`}
+                      >
+                        Random
+                      </button>
+                      <input
+                        type="number"
+                        value={seed || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setSeed(value ? parseInt(value) : null);
+                          setUseRandomSeed(false);
+                        }}
+                        placeholder="Seed"
+                        className="flex-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={useRandomSeed}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="flex gap-3 items-center">
@@ -484,29 +860,35 @@ export default function ImageGenerator() {
               <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-sm p-5 space-y-4">
                 <h3 className="text-lg font-semibold text-slate-200 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 10-2 0 1 1 0 002 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                   Image Details
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
                   <div className="space-y-1">
                     <p className="text-slate-400">Model</p>
-                    <p className="font-medium text-slate-300">{imageDetails?.model || 'Google/Imagen-4'}</p>
+                    <p className="font-medium text-slate-300">{imageDetails?.model || 'Google Imagen-4-Fast'}</p>
                   </div>
                   
                   <div className="space-y-1">
-                    <p className="text-slate-400">Size</p>
-                    <p className="font-medium text-slate-300">{imageDetails?.width || 768} × {imageDetails?.height || 768} px</p>
+                    <p className="text-slate-400">Aspect Ratio</p>
+                    <p className="font-medium text-slate-300">{aspectRatio}</p>
                   </div>
                   
                   <div className="space-y-1">
-                    <p className="text-slate-400">Inference Steps</p>
-                    <p className="font-medium text-slate-300">{imageDetails?.inferenceSteps || 30}</p>
+                    <p className="text-slate-400">Resolution</p>
+                    <p className="font-medium text-slate-300">
+                      {aspectRatio === '1:1' && '1024×1024'}
+                      {aspectRatio === '4:3' && '1280×896'}
+                      {aspectRatio === '3:4' && '896×1280'}
+                      {aspectRatio === '16:9' && '1408×768'}
+                      {aspectRatio === '9:16' && '768×1408'}
+                    </p>
                   </div>
                   
                   <div className="space-y-1">
-                    <p className="text-slate-400">Guidance Scale</p>
-                    <p className="font-medium text-slate-300">{imageDetails?.guidanceScale || 7}</p>
+                    <p className="text-slate-400">Images Generated</p>
+                    <p className="font-medium text-slate-300">{numberOfImages}</p>
                   </div>
                   
                   <div className="space-y-1">
@@ -518,10 +900,50 @@ export default function ImageGenerator() {
                     </p>
                   </div>
                   
+                  <div className="space-y-1">
+                    <p className="text-slate-400">Seed</p>
+                    <p className="font-medium text-slate-300">
+                      {useRandomSeed ? 'Random' : (seed || 'Random')}
+                    </p>
+                  </div>
+                  
+                  {negativePrompt && (
+                    <div className="space-y-1 md:col-span-2">
+                      <p className="text-slate-400">Negative Prompt</p>
+                      <p className="font-medium text-slate-300 text-xs">{negativePrompt}</p>
+                    </div>
+                  )}
+                  
                   <div className="space-y-1 md:col-span-2">
                     <p className="text-slate-400">Prompt</p>
                     <p className="font-medium text-slate-300">{prompt}</p>
                   </div>
+                </div>
+
+                {/* Regenerate Button */}
+                <div className="pt-4 border-t border-slate-700">
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={loading || !prompt.trim()}
+                    className="w-full bg-purple-900/60 border border-purple-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-purple-800/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-3"
+                  >
+                    {loading ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Regenerating...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center">
+                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                        </svg>
+                        Regenerate with Same Settings
+                      </span>
+                    )}
+                  </button>
                 </div>
                 
                 {/* Save Image Button */}
@@ -692,7 +1114,7 @@ export default function ImageGenerator() {
                     >
                       <span className="flex items-center justify-center">
                         <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
                         </svg>
                         Download 3D Model
                       </span>

@@ -28,7 +28,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const { prompt, aspect_ratio = "1:1" } = reqBody;
+    const { 
+      prompt, 
+      aspect_ratio = "1:1",
+      numberOfImages = 1,
+      seed,
+      negativePrompt,
+      personGeneration = 'allow_adult'
+    } = reqBody;
     
     // Validate prompt
     if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
@@ -65,10 +72,22 @@ export async function POST(req: Request) {
       const startTime = Date.now();
       
       // Prepare input params for debugging - optimized for Imagen-4-Fast
-      const inputParams = {
+      const inputParams: any = {
         prompt,
         aspect_ratio: aspect_ratio // Can be "1:1", "4:3", "3:4", "16:9", "9:16"
       };
+
+      // Add optional parameters if provided
+      if (seed !== undefined && seed !== null) {
+        inputParams.seed = seed;
+      }
+      if (negativePrompt && negativePrompt.trim()) {
+        inputParams.negative_prompt = negativePrompt.trim();
+      }
+      if (personGeneration !== 'allow_adult') {
+        inputParams.person_generation = personGeneration;
+      }
+      
       console.log(`[DEBUG][Request #${currentRequest}] Input parameters:`, inputParams);
       
       // Use Google Imagen-4-Fast model
@@ -145,7 +164,11 @@ export async function POST(req: Request) {
         modelId: MODEL_ID,
         aspect_ratio: aspect_ratio,
         generationTime,
-        prompt
+        prompt,
+        numberOfImages,
+        seed: seed || null,
+        negativePrompt: negativePrompt || null,
+        personGeneration
       });
     } catch (initError) {
       console.error(`[DEBUG][Request #${currentRequest}] Error initializing Replicate client:`, initError);
