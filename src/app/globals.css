@@ -108,4 +108,38 @@ body {
   .btn-gradient:hover {
     box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
   }
+  
+  /* Orange slider styling for coloring book controls */
+  .slider-orange::-webkit-slider-thumb {
+    appearance: none;
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    background: linear-gradient(45deg, #ea580c, #f97316);
+    cursor: pointer;
+    border: 2px solid #1e293b;
+    box-shadow: 0 0 8px rgba(234, 88, 12, 0.5);
+  }
+  
+  .slider-orange::-moz-range-thumb {
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    background: linear-gradient(45deg, #ea580c, #f97316);
+    cursor: pointer;
+    border: 2px solid #1e293b;
+    box-shadow: 0 0 8px rgba(234, 88, 12, 0.5);
+  }
+  
+  .slider-orange::-webkit-slider-track {
+    background: linear-gradient(to right, #475569, #ea580c);
+    height: 8px;
+    border-radius: 4px;
+  }
+  
+  .slider-orange::-moz-range-track {
+    background: linear-gradient(to right, #475569, #ea580c);
+    height: 8px;
+    border-radius: 4px;
+  }
 }

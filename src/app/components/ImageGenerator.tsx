@@ -81,6 +81,29 @@ export default function ImageGenerator() {
   const [modelGenerationTime, setModelGenerationTime] = useState<number | null>(null);
   const [model3DSuccess, setModel3DSuccess] = useState('');
 
+  // For coloring book generation
+  const [coloringBookUrl, setColoringBookUrl] = useState('');
+  const [generatingColoringBook, setGeneratingColoringBook] = useState(false);
+  const [coloringBookError, setColoringBookError] = useState('');
+  const [showColoringBookAdvanced, setShowColoringBookAdvanced] = useState(false);
+  
+  // Coloring book parameters
+  const [coloringBookPromptStrength, setColoringBookPromptStrength] = useState(0.8);
+  const [coloringBookGuidanceScale, setColoringBookGuidanceScale] = useState(7.5);
+  const [coloringBookInferenceSteps, setColoringBookInferenceSteps] = useState(50);
+  const [coloringBookNegativePrompt, setColoringBookNegativePrompt] = useState('colors, shading, photorealistic, realistic, painting');
+  const [coloringBookSeed, setColoringBookSeed] = useState<number | null>(null);
+  const [coloringBookScheduler, setColoringBookScheduler] = useState('K_EULER');
+  const [useColoringBookRandomSeed, setUseColoringBookRandomSeed] = useState(true);
+
+  // For Anthropic prompt generation
+  const [showPromptGenerator, setShowPromptGenerator] = useState(false);
+  const [promptTemplate, setPromptTemplate] = useState('Create a prompt to create a 3D model of a {{object_type}} that is well lit, ready for a photo shoot with a blank, light gray background. In the style of {{style}}');
+  const [promptVariables, setPromptVariables] = useState({ object_type: '', style: '' });
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [promptError, setPromptError] = useState('');
+
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -103,6 +126,10 @@ export default function ImageGenerator() {
     setModelUrl('');
     setModel3DError('');
     setModelGenerationTime(null);
+    
+    // Clear coloring book data
+    setColoringBookUrl('');
+    setColoringBookError('');
 
     try {
       const startTime = Date.now();
@@ -275,6 +302,61 @@ export default function ImageGenerator() {
     }
   };
 
+  // Function to generate coloring book from the current image
+  const generateColoringBook = async () => {
+    if (!imageUrl) {
+      setColoringBookError('Please generate an image first');
+      return;
+    }
+
+    setGeneratingColoringBook(true);
+    setColoringBookError('');
+
+    try {
+      console.log('Starting coloring book generation with image:', imageUrl);
+      
+      const requestBody = {
+        imageUrl,
+        prompt: prompt || "A black and white coloring page",
+        prompt_strength: coloringBookPromptStrength,
+        guidance_scale: coloringBookGuidanceScale,
+        num_inference_steps: coloringBookInferenceSteps,
+        negative_prompt: coloringBookNegativePrompt,
+        scheduler: coloringBookScheduler,
+        ...((!useColoringBookRandomSeed && coloringBookSeed !== null) && { seed: coloringBookSeed })
+      };
+
+      console.log('Coloring book request body:', requestBody);
+      
+      const response = await fetch('/api/replicate/coloring-book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate coloring book');
+      }
+
+      const data = await response.json();
+      
+      if (!data.imageUrl) {
+        throw new Error('No coloring book image URL in response');
+      }
+
+      setColoringBookUrl(data.imageUrl);
+      console.log('Coloring book generated successfully:', data.imageUrl);
+    } catch (error) {
+      console.error('Error generating coloring book:', error);
+      setColoringBookError(error instanceof Error ? error.message : 'Failed to generate coloring book');
+    } finally {
+      setGeneratingColoringBook(false);
+    }
+  };
+
   // Function to save the image locally (bypass Firebase completely)
   const saveImageToFirebase = async () => {
     console.log('Starting saveImageToFirebase function (using local storage)');
@@ -349,6 +431,10 @@ export default function ImageGenerator() {
     setModel3DError('');
     setModelGenerationTime(null);
     
+    // Clear coloring book data
+    setColoringBookUrl('');
+    setColoringBookError('');
+    
     // Focus the prompt textarea after clearing
     setTimeout(() => {
       const promptTextarea = document.getElementById('prompt');
@@ -381,6 +467,82 @@ export default function ImageGenerator() {
     const newSeed = Math.floor(Math.random() * 1000000);
     setSeed(newSeed);
     setUseRandomSeed(false);
+  };
+
+  // Function to generate a random seed for coloring book
+  const generateColoringBookRandomSeed = () => {
+    const newSeed = Math.floor(Math.random() * 1000000);
+    setColoringBookSeed(newSeed);
+    setUseColoringBookRandomSeed(false);
+  };
+
+  // Function to generate prompt with Anthropic
+  const generatePromptWithAnthropic = async () => {
+    if (!promptTemplate.trim()) {
+      setPromptError('Please enter a prompt template');
+      return;
+    }
+
+    setGeneratingPrompt(true);
+    setPromptError('');
+
+    try {
+      console.log('Starting prompt generation with Anthropic');
+      
+      const response = await fetch('/api/anthropic/generate-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template: promptTemplate,
+          variables: promptVariables
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate prompt');
+      }
+
+      const data = await response.json();
+      
+      if (!data.generatedPrompt) {
+        throw new Error('No prompt generated');
+      }
+
+      setGeneratedPrompt(data.generatedPrompt);
+      console.log('Prompt generated successfully:', data.generatedPrompt);
+    } catch (error) {
+      console.error('Error generating prompt:', error);
+      setPromptError(error instanceof Error ? error.message : 'Failed to generate prompt');
+    } finally {
+      setGeneratingPrompt(false);
+    }
+  };
+
+  // Function to use generated prompt
+  const useGeneratedPrompt = () => {
+    if (generatedPrompt) {
+      setPrompt(generatedPrompt);
+      // Close the prompt generator
+      setShowPromptGenerator(false);
+      // Focus the main prompt textarea
+      setTimeout(() => {
+        const promptTextarea = document.getElementById('prompt');
+        if (promptTextarea) {
+          promptTextarea.focus();
+        }
+      }, 100);
+    }
+  };
+
+  // Function to update prompt variables
+  const updatePromptVariable = (key: string, value: string) => {
+    setPromptVariables(prev => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   return (
@@ -416,6 +578,137 @@ export default function ImageGenerator() {
               className="w-full p-4 bg-slate-900 border border-slate-700 rounded-lg shadow-inner focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-100 relative z-10 placeholder-slate-500"
               rows={3}
             />
+          </div>
+
+          {/* AI Prompt Generator Section */}
+          <div className="bg-gradient-to-br from-purple-900/30 to-blue-900/30 border border-purple-700/50 rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-2 text-purple-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+                <h3 className="text-lg font-semibold text-purple-300">AI Prompt Generator</h3>
+              </div>
+              <div className="bg-purple-900 rounded-lg px-3 py-1 text-xs font-medium text-purple-300 flex items-center border border-purple-700">
+                <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 10-2 0 1 1 0 002 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                Claude AI
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-400">
+              Use Claude AI to generate detailed, professional prompts for your image generation.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowPromptGenerator(!showPromptGenerator)}
+              className="w-full bg-purple-900/60 border border-purple-700/60 text-purple-200 font-medium py-2 px-4 rounded-lg hover:bg-purple-800/60 transition-all text-sm"
+            >
+              {showPromptGenerator ? 'Hide Prompt Generator' : 'Open Prompt Generator'}
+            </button>
+
+            {showPromptGenerator && (
+              <div className="space-y-4 border-t border-purple-700/50 pt-4">
+                {/* Template Input */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Prompt Template
+                  </label>
+                  <textarea
+                    value={promptTemplate}
+                    onChange={(e) => setPromptTemplate(e.target.value)}
+                    placeholder="Create a prompt to create a 3D model of a {{object_type}} that is well lit, ready for a photo shoot with a blank, light gray background. In the style of {{style}}"
+                    className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-slate-500"
+                    rows={3}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Use {`{{variable_name}}`} for dynamic variables</p>
+                </div>
+
+                {/* Variables Section */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Variables
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Object Type</label>
+                      <input
+                        type="text"
+                        value={promptVariables.object_type}
+                        onChange={(e) => updatePromptVariable('object_type', e.target.value)}
+                        placeholder="e.g., sports car, dragon, castle"
+                        className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-slate-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Style</label>
+                      <input
+                        type="text"
+                        value={promptVariables.style}
+                        onChange={(e) => updatePromptVariable('style', e.target.value)}
+                        placeholder="e.g., futuristic, medieval, minimalist"
+                        className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-slate-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Generate Button */}
+                <button
+                  type="button"
+                  onClick={generatePromptWithAnthropic}
+                  disabled={generatingPrompt || !promptTemplate.trim()}
+                  className="w-full bg-purple-900/60 border border-purple-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-purple-800/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generatingPrompt ? (
+                    <span className="flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating with Claude AI...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center">
+                      <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                      </svg>
+                      Generate Professional Prompt
+                    </span>
+                  )}
+                </button>
+
+                {/* Error Display */}
+                {promptError && (
+                  <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
+                    <p className="text-sm text-red-400 flex items-center">
+                      <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                      {promptError}
+                    </p>
+                  </div>
+                )}
+
+                {/* Generated Prompt Display */}
+                {generatedPrompt && (
+                  <div className="bg-green-900/20 border border-green-800 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium text-green-300">Generated Prompt</h4>
+                      <button
+                        type="button"
+                        onClick={useGeneratedPrompt}
+                        className="px-3 py-1 bg-green-700 hover:bg-green-600 text-green-100 text-xs rounded-lg transition-colors"
+                      >
+                        Use This Prompt
+                      </button>
+                    </div>
+                    <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      <p className="text-sm text-slate-200 whitespace-pre-wrap">{generatedPrompt}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Advanced Controls */}
@@ -996,7 +1289,256 @@ export default function ImageGenerator() {
               </div>
             </div>
             
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-6">
+              {/* Coloring Book Generation Section */}
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
+                <div className="p-6 space-y-5">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-100">Coloring Book Creator</h3>
+                    <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-orange-400 flex items-center border border-slate-700">
+                      <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zM3 15a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zm6-11a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm6 3a1 1 0 011-1h1a1 1 0 011 1v7a1 1 0 01-1 1h-1a1 1 0 01-1-1V7z" clipRule="evenodd" />
+                      </svg>
+                      SDXL Coloring
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-slate-400 mb-4">
+                    Transform your image into a black and white coloring page perfect for printing and coloring.
+                  </p>
+                  
+                  {/* Advanced Coloring Book Controls */}
+                  <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 space-y-4 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowColoringBookAdvanced(!showColoringBookAdvanced)}
+                      className="flex items-center justify-between w-full text-slate-300 hover:text-white transition-colors"
+                    >
+                      <span className="font-medium flex items-center">
+                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947z" clipRule="evenodd" />
+                          <path fillRule="evenodd" d="M10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                        </svg>
+                        Advanced Coloring Book Settings
+                      </span>
+                      <svg className={`w-4 h-4 transition-transform ${showColoringBookAdvanced ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+
+                    {showColoringBookAdvanced && (
+                      <div className="space-y-6">
+                        {/* Prompt Strength */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Transformation Strength: {coloringBookPromptStrength.toFixed(2)}
+                          </label>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-xs text-slate-500">Preserve Original</span>
+                            <input
+                              type="range"
+                              min="0.1"
+                              max="1.0"
+                              step="0.1"
+                              value={coloringBookPromptStrength}
+                              onChange={(e) => setColoringBookPromptStrength(parseFloat(e.target.value))}
+                              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-orange"
+                            />
+                            <span className="text-xs text-slate-500">Full Transform</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">Higher values create more dramatic coloring book transformation</p>
+                        </div>
+
+                        {/* Guidance Scale */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Style Adherence: {coloringBookGuidanceScale.toFixed(1)}
+                          </label>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-xs text-slate-500">Creative</span>
+                            <input
+                              type="range"
+                              min="1"
+                              max="20"
+                              step="0.5"
+                              value={coloringBookGuidanceScale}
+                              onChange={(e) => setColoringBookGuidanceScale(parseFloat(e.target.value))}
+                              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-orange"
+                            />
+                            <span className="text-xs text-slate-500">Strict</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">How strictly to follow coloring book style guidelines</p>
+                        </div>
+
+                        {/* Inference Steps */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Quality Steps: {coloringBookInferenceSteps}
+                          </label>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-xs text-slate-500">Fast</span>
+                            <input
+                              type="range"
+                              min="20"
+                              max="150"
+                              step="10"
+                              value={coloringBookInferenceSteps}
+                              onChange={(e) => setColoringBookInferenceSteps(parseInt(e.target.value))}
+                              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-orange"
+                            />
+                            <span className="text-xs text-slate-500">High Quality</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1">More steps = better quality but slower generation</p>
+                        </div>
+
+                        {/* Scheduler */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Sampling Method
+                          </label>
+                          <select
+                            value={coloringBookScheduler}
+                            onChange={(e) => setColoringBookScheduler(e.target.value)}
+                            className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          >
+                            <option value="K_EULER">K_EULER (Recommended)</option>
+                            <option value="K_EULER_ANCESTRAL">K_EULER_ANCESTRAL</option>
+                            <option value="DDIM">DDIM</option>
+                            <option value="DPMSolverMultistep">DPM Solver</option>
+                            <option value="HeunDiscrete">Heun Discrete</option>
+                            <option value="KarrasDPM">Karras DPM</option>
+                            <option value="PNDM">PNDM</option>
+                          </select>
+                          <p className="text-xs text-slate-500 mt-1">Different algorithms for generating the image</p>
+                        </div>
+
+                        {/* Negative Prompt */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Avoid These Elements
+                          </label>
+                          <textarea
+                            value={coloringBookNegativePrompt}
+                            onChange={(e) => setColoringBookNegativePrompt(e.target.value)}
+                            placeholder="colors, shading, photorealistic, realistic, painting"
+                            className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                            rows={2}
+                          />
+                          <p className="text-xs text-slate-500 mt-1">Specify what should be avoided in the coloring book</p>
+                        </div>
+
+                        {/* Seed Controls */}
+                        <div className="space-y-3">
+                          <label className="block text-sm font-medium text-slate-300">
+                            Reproducibility Control
+                          </label>
+                          
+                          <div className="flex items-center space-x-3">
+                            <input
+                              type="checkbox"
+                              id="useColoringBookRandomSeed"
+                              checked={useColoringBookRandomSeed}
+                              onChange={(e) => setUseColoringBookRandomSeed(e.target.checked)}
+                              className="w-4 h-4 text-orange-600 bg-slate-800 border-slate-600 rounded focus:ring-orange-500"
+                            />
+                            <label htmlFor="useColoringBookRandomSeed" className="text-sm text-slate-300">
+                              Use random seed (different result each time)
+                            </label>
+                          </div>
+
+                          {!useColoringBookRandomSeed && (
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="number"
+                                value={coloringBookSeed || ''}
+                                onChange={(e) => setColoringBookSeed(e.target.value ? parseInt(e.target.value) : null)}
+                                placeholder="Enter seed number"
+                                className="flex-1 p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={generateColoringBookRandomSeed}
+                                className="px-3 py-2 bg-orange-900/60 border border-orange-700/60 text-orange-200 text-sm rounded-lg hover:bg-orange-800/60 transition-colors"
+                              >
+                                Random
+                              </button>
+                            </div>
+                          )}
+                          <p className="text-xs text-slate-500">Use the same seed to reproduce identical results</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <button
+                    onClick={generateColoringBook}
+                    disabled={generatingColoringBook || !imageUrl}
+                    className={`${generatingColoringBook ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 transition-all`}
+                  >
+                    {generatingColoringBook ? (
+                      <span className="flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating Coloring Book...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center">
+                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zM3 15a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zm6-11a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm6 3a1 1 0 011-1h1a1 1 0 011 1v7a1 1 0 01-1 1h-1a1 1 0 01-1-1V7z" clipRule="evenodd" />
+                        </svg>
+                        Generate Coloring Book
+                      </span>
+                    )}
+                  </button>
+                  
+                  {!imageUrl && (
+                    <div className="flex items-center text-xs text-orange-400">
+                      <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      Please generate an image first
+                    </div>
+                  )}
+                  
+                  {coloringBookError && (
+                    <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
+                      <p className="text-sm text-red-400 flex items-center">
+                        <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        {coloringBookError}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {coloringBookUrl && (
+                  <div className="space-y-4 p-6 bg-slate-900 border-t border-slate-700">
+                    <div className="relative group overflow-hidden rounded-lg shadow-lg border border-slate-700">
+                      <Image
+                        src={coloringBookUrl}
+                        alt="Generated coloring book image"
+                        width={400}
+                        height={400}
+                        className="w-full h-auto object-contain bg-white"
+                      />
+                    </div>
+                    
+                    <a 
+                      href={coloringBookUrl} 
+                      download="coloring-book.png"
+                      className="block w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 text-center transition-all"
+                    >
+                      <span className="flex items-center justify-center">
+                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        Download Coloring Book
+                      </span>
+                    </a>
+                  </div>
+                )}
+              </div>
+
               {/* 3D Model Generation Section */}
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
                 <div className="p-6 space-y-5">
