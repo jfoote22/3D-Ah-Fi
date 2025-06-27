@@ -7,7 +7,46 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import Header from '../components/Header';
 import ModelViewer from '../components/ModelViewer';
-import { Loader2, Box, Trash2 } from 'lucide-react';
+import { Loader2, Box, Trash2, Download } from 'lucide-react';
+
+// Helper function to generate a clean filename
+const generateFilename = (prompt: string, type: 'image' | '3d') => {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+  const cleanPrompt = prompt.slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
+  const extension = type === '3d' ? 'glb' : 'png';
+  return `${type}-${cleanPrompt}-${timestamp}.${extension}`;
+};
+
+// Helper function to download images with better cross-origin support
+const downloadImage = async (imageUrl: string, filename: string) => {
+  try {
+    const response = await fetch(`/api/download-image?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent(filename)}`);
+    
+    if (!response.ok) {
+      throw new Error('Download failed');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Download failed:', error);
+    // Fallback to direct link
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = filename;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+};
 
 interface SavedImage {
   id: string;
@@ -336,36 +375,59 @@ export default function MyModels() {
                         />
                       </div>
                       
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => generate3DModel(selectedImage)}
-                          disabled={generating3D}
-                          className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
-                        >
-                          {generating3D ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                              Generating 3D...
-                            </>
-                          ) : (
-                            <>
-                              <Box className="w-4 h-4 mr-2" />
-                              Generate 3D Model
-                            </>
-                          )}
-                        </button>
+                      <div className="flex flex-col space-y-2">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => generate3DModel(selectedImage)}
+                            disabled={generating3D}
+                            className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                          >
+                            {generating3D ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                Generating 3D...
+                              </>
+                            ) : (
+                              <>
+                                <Box className="w-4 h-4 mr-2" />
+                                Generate 3D Model
+                              </>
+                            )}
+                          </button>
+                          
+                          <button
+                            onClick={() => handleDeleteImage(selectedImage)}
+                            disabled={isDeleting}
+                            className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                         
-                        <button
-                          onClick={() => handleDeleteImage(selectedImage)}
-                          disabled={isDeleting}
-                          className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
-                        >
-                          {isDeleting ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
+                        {/* Download buttons */}
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => downloadImage(selectedImage.imageUrl, generateFilename(selectedImage.prompt, 'image'))}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download Image
+                          </button>
+                          
+                          {selectedImage.modelUrl && (
+                            <button
+                              onClick={() => downloadImage(selectedImage.modelUrl!, generateFilename(selectedImage.prompt, '3d'))}
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              Download 3D Model
+                            </button>
                           )}
-                        </button>
+                        </div>
                       </div>
                     </div>
                     

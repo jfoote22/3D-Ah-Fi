@@ -48,6 +48,36 @@ interface SavedImage {
 // Default model ID as fallback
 const DEFAULT_MODEL_ID = "stability-ai/sdxl:c221b2b8ef527988fb59bf24a8b97c4561f1c671f73bd389f866bfb27c061316";
 
+// Helper function to generate a clean filename
+const generateFilename = (prompt: string, type: 'image' | 'coloring' | '3d') => {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+  const cleanPrompt = prompt.slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
+  const extension = type === '3d' ? 'glb' : 'png';
+  return `${type}-${cleanPrompt}-${timestamp}.${extension}`;
+};
+
+// Helper function to download files via our API (handles CORS issues)
+const downloadFile = async (url: string, filename: string) => {
+  try {
+    const downloadUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('Download failed:', error);
+    // Fallback to direct download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+};
+
 export default function ImageGenerator() {
   const { user } = useAuth();
   const [prompt, setPrompt] = useState('');
@@ -1286,6 +1316,21 @@ export default function ImageGenerator() {
                     </div>
                   )}
                 </div>
+                
+                {/* Download Image Button */}
+                <div className="pt-4 border-t border-slate-700">
+                  <button 
+                    onClick={() => downloadFile(imageUrl, generateFilename(prompt, 'image'))}
+                    className="block w-full bg-green-900/60 border border-green-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-green-800/60 text-center transition-all"
+                  >
+                    <span className="flex items-center justify-center">
+                      <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                      Download Image
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -1523,9 +1568,8 @@ export default function ImageGenerator() {
                       />
                     </div>
                     
-                    <a 
-                      href={coloringBookUrl} 
-                      download="coloring-book.png"
+                    <button 
+                      onClick={() => downloadFile(coloringBookUrl, generateFilename(prompt, 'coloring'))}
                       className="block w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 text-center transition-all"
                     >
                       <span className="flex items-center justify-center">
@@ -1534,7 +1578,7 @@ export default function ImageGenerator() {
                         </svg>
                         Download Coloring Book
                       </span>
-                    </a>
+                    </button>
                   </div>
                 )}
               </div>
@@ -1649,9 +1693,8 @@ export default function ImageGenerator() {
                       </div>
                     </div>
                     
-                    <a 
-                      href={modelUrl} 
-                      download="generated-3d-model.glb"
+                    <button 
+                      onClick={() => downloadFile(modelUrl, generateFilename(prompt, '3d'))}
                       className="block w-full btn-gradient text-white font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg text-center transition-all"
                     >
                       <span className="flex items-center justify-center">
@@ -1660,7 +1703,7 @@ export default function ImageGenerator() {
                         </svg>
                         Download 3D Model
                       </span>
-                    </a>
+                    </button>
                     
                     {/* Save to My Models button - now positioned below 3D model */}
                     {modelUrl && !generating3D && (
