@@ -729,9 +729,11 @@ export default function ImageGenerator() {
                   </label>
                   {inputImagePreview ? (
                     <div className="relative">
-                      <img
+                      <Image
                         src={inputImagePreview}
                         alt="Input"
+                        width={400}
+                        height={192}
                         className="w-full h-48 object-cover rounded-lg border border-slate-600"
                       />
                       <button
@@ -1387,7 +1389,7 @@ export default function ImageGenerator() {
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Action (What it's doing)
+                    Action (What it&apos;s doing)
                   </label>
                   <input
                     type="text"

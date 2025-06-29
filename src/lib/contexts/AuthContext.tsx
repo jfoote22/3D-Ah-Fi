@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeout);
       unsubscribe();
     };
-  }, []);
+  }, [loading]);
 
   const value = {
     user,
