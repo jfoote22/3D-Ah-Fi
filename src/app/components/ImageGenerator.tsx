@@ -122,14 +122,10 @@ export default function ImageGenerator() {
   const [coloringBookError, setColoringBookError] = useState('');
   const [showColoringBookAdvanced, setShowColoringBookAdvanced] = useState(false);
   
-  // Coloring book parameters
-  const [coloringBookPromptStrength, setColoringBookPromptStrength] = useState(0.8);
-  const [coloringBookGuidanceScale, setColoringBookGuidanceScale] = useState(7.5);
-  const [coloringBookInferenceSteps, setColoringBookInferenceSteps] = useState(50);
-  const [coloringBookNegativePrompt, setColoringBookNegativePrompt] = useState('colors, shading, photorealistic, realistic, painting');
-  const [coloringBookSeed, setColoringBookSeed] = useState<number | null>(null);
-  const [coloringBookScheduler, setColoringBookScheduler] = useState('K_EULER');
-  const [useColoringBookRandomSeed, setUseColoringBookRandomSeed] = useState(true);
+  // Coloring book parameters for Anthropic workflow
+  const [coloringBookThing, setColoringBookThing] = useState('');
+  const [coloringBookAction, setColoringBookAction] = useState('');
+  const [generatedColoringPrompt, setGeneratedColoringPrompt] = useState('');
 
   // For Anthropic prompt generation
   const [showPromptGenerator, setShowPromptGenerator] = useState(false);
@@ -403,33 +399,31 @@ export default function ImageGenerator() {
     }
   };
 
-  // Function to generate coloring book from the current image
+  // Function to generate coloring book using Anthropic workflow
   const generateColoringBook = async () => {
-    if (!imageUrl) {
-      setColoringBookError('Please generate an image first');
+    if (!coloringBookThing || !coloringBookAction) {
+      setColoringBookError('Please enter both a subject and action for the coloring book');
       return;
     }
 
     setGeneratingColoringBook(true);
     setColoringBookError('');
+    setGeneratedColoringPrompt('');
 
     try {
-      console.log('Starting coloring book generation with image:', imageUrl);
+      console.log('Starting coloring book generation with Anthropic:', { 
+        thing: coloringBookThing, 
+        action: coloringBookAction 
+      });
       
       const requestBody = {
-        imageUrl,
-        prompt: prompt || "A black and white coloring page",
-        prompt_strength: coloringBookPromptStrength,
-        guidance_scale: coloringBookGuidanceScale,
-        num_inference_steps: coloringBookInferenceSteps,
-        negative_prompt: coloringBookNegativePrompt,
-        scheduler: coloringBookScheduler,
-        ...((!useColoringBookRandomSeed && coloringBookSeed !== null) && { seed: coloringBookSeed })
+        thing: coloringBookThing,
+        action: coloringBookAction
       };
 
       console.log('Coloring book request body:', requestBody);
       
-      const response = await fetch('/api/replicate/coloring-book', {
+      const response = await fetch('/api/anthropic/coloring-book', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -449,7 +443,9 @@ export default function ImageGenerator() {
       }
 
       setColoringBookUrl(data.imageUrl);
+      setGeneratedColoringPrompt(data.generatedPrompt);
       console.log('Coloring book generated successfully:', data.imageUrl);
+      console.log('Generated prompt:', data.generatedPrompt);
     } catch (error) {
       console.error('Error generating coloring book:', error);
       setColoringBookError(error instanceof Error ? error.message : 'Failed to generate coloring book');
@@ -535,6 +531,9 @@ export default function ImageGenerator() {
     // Clear coloring book data
     setColoringBookUrl('');
     setColoringBookError('');
+    setColoringBookThing('');
+    setColoringBookAction('');
+    setGeneratedColoringPrompt('');
     
     // Clear image-to-image data
     setInputImage(null);
@@ -575,11 +574,11 @@ export default function ImageGenerator() {
     setUseRandomSeed(false);
   };
 
-  // Function to generate a random seed for coloring book
-  const generateColoringBookRandomSeed = () => {
-    const newSeed = Math.floor(Math.random() * 1000000);
-    setColoringBookSeed(newSeed);
-    setUseColoringBookRandomSeed(false);
+  // Function to clear coloring book inputs
+  const clearColoringBookInputs = () => {
+    setColoringBookThing('');
+    setColoringBookAction('');
+    setGeneratedColoringPrompt('');
   };
 
   // Function to generate prompt with Anthropic
@@ -1569,191 +1568,81 @@ export default function ImageGenerator() {
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
                 <div className="p-6 space-y-5">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-slate-100">Coloring Book Creator</h3>
-                    <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-orange-400 flex items-center border border-slate-700">
+                    <h3 className="text-xl font-bold text-slate-100">AI Coloring Book Creator</h3>
+                    <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-purple-400 flex items-center border border-slate-700">
                       <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zM3 15a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zm6-11a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm6 3a1 1 0 011-1h1a1 1 0 011 1v7a1 1 0 01-1 1h-1a1 1 0 01-1-1V7z" clipRule="evenodd" />
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 10-2 0 1 1 0 002 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                       </svg>
-                      SDXL Coloring
+                      Claude AI
                     </div>
                   </div>
                   
                   <p className="text-sm text-slate-400 mb-4">
-                    Transform your image into a black and white coloring page perfect for printing and coloring.
+                    Use Claude AI to generate custom coloring book pages from your ideas. Perfect for kids and creative projects.
                   </p>
                   
-                  {/* Advanced Coloring Book Controls */}
-                  <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 space-y-4 mb-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowColoringBookAdvanced(!showColoringBookAdvanced)}
-                      className="flex items-center justify-between w-full text-slate-300 hover:text-white transition-colors"
-                    >
-                      <span className="font-medium flex items-center">
-                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947z" clipRule="evenodd" />
-                          <path fillRule="evenodd" d="M10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                        </svg>
-                        Advanced Coloring Book Settings
-                      </span>
-                      <svg className={`w-4 h-4 transition-transform ${showColoringBookAdvanced ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
+                  {/* Anthropic Coloring Book Inputs */}
+                  <div className="space-y-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Subject (What to draw)
+                        </label>
+                        <input
+                          type="text"
+                          value={coloringBookThing}
+                          onChange={(e) => setColoringBookThing(e.target.value)}
+                          placeholder="e.g., cat, dragon, castle, flower"
+                          className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                          Action (What it's doing)
+                        </label>
+                        <input
+                          type="text"
+                          value={coloringBookAction}
+                          onChange={(e) => setColoringBookAction(e.target.value)}
+                          placeholder="e.g., sitting, flying, dancing, sleeping"
+                          className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                        />
+                      </div>
+                    </div>
 
-                    {showColoringBookAdvanced && (
-                      <div className="space-y-6">
-                        {/* Prompt Strength */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Transformation Strength: {coloringBookPromptStrength.toFixed(2)}
-                          </label>
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs text-slate-500">Preserve Original</span>
-                            <input
-                              type="range"
-                              min="0.1"
-                              max="1.0"
-                              step="0.1"
-                              value={coloringBookPromptStrength}
-                              onChange={(e) => setColoringBookPromptStrength(parseFloat(e.target.value))}
-                              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-orange"
-                            />
-                            <span className="text-xs text-slate-500">Full Transform</span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">Higher values create more dramatic coloring book transformation</p>
-                        </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">
+                        Claude AI will generate a detailed coloring book prompt
+                      </p>
+                      {(coloringBookThing || coloringBookAction) && (
+                        <button
+                          type="button"
+                          onClick={clearColoringBookInputs}
+                          className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                        >
+                          Clear inputs
+                        </button>
+                      )}
+                    </div>
 
-                        {/* Guidance Scale */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Style Adherence: {coloringBookGuidanceScale.toFixed(1)}
-                          </label>
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs text-slate-500">Creative</span>
-                            <input
-                              type="range"
-                              min="1"
-                              max="20"
-                              step="0.5"
-                              value={coloringBookGuidanceScale}
-                              onChange={(e) => setColoringBookGuidanceScale(parseFloat(e.target.value))}
-                              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-orange"
-                            />
-                            <span className="text-xs text-slate-500">Strict</span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">How strictly to follow coloring book style guidelines</p>
-                        </div>
-
-                        {/* Inference Steps */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Quality Steps: {coloringBookInferenceSteps}
-                          </label>
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs text-slate-500">Fast</span>
-                            <input
-                              type="range"
-                              min="20"
-                              max="150"
-                              step="10"
-                              value={coloringBookInferenceSteps}
-                              onChange={(e) => setColoringBookInferenceSteps(parseInt(e.target.value))}
-                              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-orange"
-                            />
-                            <span className="text-xs text-slate-500">High Quality</span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">More steps = better quality but slower generation</p>
-                        </div>
-
-                        {/* Scheduler */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Sampling Method
-                          </label>
-                          <select
-                            value={coloringBookScheduler}
-                            onChange={(e) => setColoringBookScheduler(e.target.value)}
-                            className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                          >
-                            <option value="K_EULER">K_EULER (Recommended)</option>
-                            <option value="K_EULER_ANCESTRAL">K_EULER_ANCESTRAL</option>
-                            <option value="DDIM">DDIM</option>
-                            <option value="DPMSolverMultistep">DPM Solver</option>
-                            <option value="HeunDiscrete">Heun Discrete</option>
-                            <option value="KarrasDPM">Karras DPM</option>
-                            <option value="PNDM">PNDM</option>
-                          </select>
-                          <p className="text-xs text-slate-500 mt-1">Different algorithms for generating the image</p>
-                        </div>
-
-                        {/* Negative Prompt */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Avoid These Elements
-                          </label>
-                          <textarea
-                            value={coloringBookNegativePrompt}
-                            onChange={(e) => setColoringBookNegativePrompt(e.target.value)}
-                            placeholder="colors, shading, photorealistic, realistic, painting"
-                            className="w-full p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
-                            rows={2}
-                          />
-                          <p className="text-xs text-slate-500 mt-1">Specify what should be avoided in the coloring book</p>
-                        </div>
-
-                        {/* Seed Controls */}
-                        <div className="space-y-3">
-                          <label className="block text-sm font-medium text-slate-300">
-                            Reproducibility Control
-                          </label>
-                          
-                          <div className="flex items-center space-x-3">
-                            <input
-                              type="checkbox"
-                              id="useColoringBookRandomSeed"
-                              checked={useColoringBookRandomSeed}
-                              onChange={(e) => setUseColoringBookRandomSeed(e.target.checked)}
-                              className="w-4 h-4 text-orange-600 bg-slate-800 border-slate-600 rounded focus:ring-orange-500"
-                            />
-                            <label htmlFor="useColoringBookRandomSeed" className="text-sm text-slate-300">
-                              Use random seed (different result each time)
-                            </label>
-                          </div>
-
-                          {!useColoringBookRandomSeed && (
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="number"
-                                value={coloringBookSeed || ''}
-                                onChange={(e) => setColoringBookSeed(e.target.value ? parseInt(e.target.value) : null)}
-                                placeholder="Enter seed number"
-                                className="flex-1 p-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
-                              />
-                              <button
-                                type="button"
-                                onClick={generateColoringBookRandomSeed}
-                                className="px-3 py-2 bg-orange-900/60 border border-orange-700/60 text-orange-200 text-sm rounded-lg hover:bg-orange-800/60 transition-colors"
-                              >
-                                Random
-                              </button>
-                            </div>
-                          )}
-                          <p className="text-xs text-slate-500">Use the same seed to reproduce identical results</p>
-                        </div>
+                    {generatedColoringPrompt && (
+                      <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
+                        <h4 className="text-sm font-medium text-orange-300 mb-2">Generated Prompt</h4>
+                        <p className="text-sm text-slate-300">{generatedColoringPrompt}</p>
                       </div>
                     )}
                   </div>
                   
                   <button
                     onClick={generateColoringBook}
-                    disabled={generatingColoringBook || !imageUrl}
-                    className={`${generatingColoringBook ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 transition-all`}
+                    disabled={generatingColoringBook || !coloringBookThing || !coloringBookAction}
+                    className={`${generatingColoringBook || !coloringBookThing || !coloringBookAction ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 transition-all`}
                   >
                     {generatingColoringBook ? (
                       <span className="flex items-center justify-center">
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Creating Coloring Book...
+                        Creating Coloring Book with Claude AI...
                       </span>
                     ) : (
                       <span className="flex items-center justify-center">
@@ -1765,12 +1654,12 @@ export default function ImageGenerator() {
                     )}
                   </button>
                   
-                  {!imageUrl && (
+                  {(!coloringBookThing || !coloringBookAction) && (
                     <div className="flex items-center text-xs text-orange-400">
                       <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                       </svg>
-                      Please generate an image first
+                      Please enter both subject and action
                     </div>
                   )}
                   
@@ -1799,7 +1688,7 @@ export default function ImageGenerator() {
                     </div>
                     
                     <button 
-                      onClick={() => downloadFile(coloringBookUrl, generateFilename(prompt, 'coloring'))}
+                      onClick={() => downloadFile(coloringBookUrl, generateFilename(`${coloringBookThing} ${coloringBookAction}`, 'coloring'))}
                       className="block w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 text-center transition-all"
                     >
                       <span className="flex items-center justify-center">
