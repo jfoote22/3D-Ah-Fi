@@ -26,6 +26,11 @@ interface ImageGenerationResponse {
   seed?: number | null;
   negativePrompt?: string | null;
   personGeneration?: string;
+  // Image-to-image specific fields
+  strength?: number;
+  guidance_scale?: number;
+  num_inference_steps?: number;
+  negative_prompt?: string;
 }
 
 interface ModelGenerationResponse {
@@ -141,6 +146,46 @@ export default function ImageGenerator() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
 
+  // Image-to-image mode states
+  const [generationMode, setGenerationMode] = useState<'text-to-image' | 'image-to-image'>('text-to-image');
+  const [inputImage, setInputImage] = useState<string | null>(null);
+  const [inputImageFile, setInputImageFile] = useState<File | null>(null);
+  const [inputImagePreview, setInputImagePreview] = useState<string | null>(null);
+  
+  // Image-to-image parameters
+  const [img2imgStrength, setImg2imgStrength] = useState(0.8);
+  const [img2imgGuidanceScale, setImg2imgGuidanceScale] = useState(7.5);
+  const [img2imgInferenceSteps, setImg2imgInferenceSteps] = useState(50);
+  const [showImg2ImgAdvanced, setShowImg2ImgAdvanced] = useState(false);
+
+  // Helper function to convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // Handle input image change for image-to-image mode
+  const handleInputImageChange = async (file: File | null) => {
+    setInputImageFile(file);
+    if (file) {
+      try {
+        const base64 = await fileToBase64(file);
+        setInputImage(base64);
+        setInputImagePreview(base64);
+      } catch (error) {
+        console.error('Error converting file to base64:', error);
+        setError('Failed to process the input image');
+      }
+    } else {
+      setInputImage(null);
+      setInputImagePreview(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[DEBUG] Form submitted with prompt:', prompt);
@@ -173,21 +218,47 @@ export default function ImageGenerator() {
       }, 30000); // 30 second timeout
 
       try {
-        console.log('[DEBUG] Sending fetch request to /api/generate-image');
+        let apiEndpoint: string;
+        let requestBody: any;
+
+        if (generationMode === 'image-to-image') {
+          // Validate input image for image-to-image mode
+          if (!inputImage) {
+            throw new Error('Please upload an input image for image-to-image generation');
+          }
+          
+          console.log('[DEBUG] Sending fetch request to /api/image-to-image');
+          apiEndpoint = '/api/image-to-image';
+          
+          // Prepare request body for image-to-image
+          requestBody = {
+            prompt,
+            image: inputImage,
+            strength: img2imgStrength,
+            guidance_scale: img2imgGuidanceScale,
+            num_inference_steps: img2imgInferenceSteps,
+            ...(negativePrompt && { negative_prompt: negativePrompt }),
+            ...(!useRandomSeed && seed !== null && { seed })
+          };
+        } else {
+          // Text-to-image mode (existing functionality)
+          console.log('[DEBUG] Sending fetch request to /api/generate-image');
+          apiEndpoint = '/api/generate-image';
+          
+          // Prepare request body with advanced parameters
+          requestBody = {
+            prompt,
+            aspect_ratio: aspectRatio,
+            numberOfImages,
+            ...(negativePrompt && { negativePrompt }),
+            ...(personGeneration !== 'allow_adult' && { personGeneration }),
+            ...(!useRandomSeed && seed !== null && { seed })
+          };
+        }
         
-        // Prepare request body with advanced parameters
-        const requestBody = {
-          prompt,
-          aspect_ratio: aspectRatio,
-          numberOfImages,
-          ...(negativePrompt && { negativePrompt }),
-          ...(personGeneration !== 'allow_adult' && { personGeneration }),
-          ...(!useRandomSeed && seed !== null && { seed })
-        };
+        console.log('[DEBUG] Request body:', { ...requestBody, image: requestBody.image ? '[BASE64_IMAGE_DATA]' : undefined });
         
-        console.log('[DEBUG] Request body:', requestBody);
-        
-        const response = await fetch('/api/generate-image', {
+        const response = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -465,6 +536,11 @@ export default function ImageGenerator() {
     setColoringBookUrl('');
     setColoringBookError('');
     
+    // Clear image-to-image data
+    setInputImage(null);
+    setInputImageFile(null);
+    setInputImagePreview(null);
+    
     // Focus the prompt textarea after clearing
     setTimeout(() => {
       const promptTextarea = document.getElementById('prompt');
@@ -608,6 +684,160 @@ export default function ImageGenerator() {
               className="w-full p-4 bg-slate-900 border border-slate-700 rounded-lg shadow-inner focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-100 relative z-10 placeholder-slate-500"
               rows={3}
             />
+          </div>
+
+          {/* Generation Mode Toggle */}
+          <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-slate-300">Generation Mode</h3>
+            </div>
+            
+            <div className="flex bg-slate-800 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setGenerationMode('text-to-image')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  generationMode === 'text-to-image'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Text to Image
+              </button>
+              <button
+                type="button"
+                onClick={() => setGenerationMode('image-to-image')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  generationMode === 'image-to-image'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Image to Image
+              </button>
+            </div>
+
+            {/* Image Upload for Image-to-Image Mode */}
+            {generationMode === 'image-to-image' && (
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Input Image
+                  </label>
+                  {inputImagePreview ? (
+                    <div className="relative">
+                      <img
+                        src={inputImagePreview}
+                        alt="Input"
+                        className="w-full h-48 object-cover rounded-lg border border-slate-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleInputImageChange(null)}
+                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full transition-colors"
+                      >
+                        <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed border-slate-600 rounded-lg p-6">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleInputImageChange(e.target.files?.[0] || null)}
+                        className="hidden"
+                        id="input-image-upload"
+                      />
+                      <label
+                        htmlFor="input-image-upload"
+                        className="cursor-pointer flex flex-col items-center justify-center text-center"
+                      >
+                        <svg className="w-12 h-12 text-slate-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-slate-400 mb-1">Click to upload an image</p>
+                        <p className="text-xs text-slate-500">PNG, JPG, GIF up to 10MB</p>
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Image-to-Image Advanced Controls */}
+                <button
+                  type="button"
+                  onClick={() => setShowImg2ImgAdvanced(!showImg2ImgAdvanced)}
+                  className="flex items-center justify-between w-full text-slate-300 hover:text-white transition-colors"
+                >
+                  <span className="text-sm font-medium">Image-to-Image Settings</span>
+                  <svg className={`w-4 h-4 transition-transform ${showImg2ImgAdvanced ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+
+                {showImg2ImgAdvanced && (
+                  <div className="space-y-4 border-t border-slate-700 pt-4">
+                    {/* Strength */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Strength: {img2imgStrength}
+                      </label>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="1.0"
+                        step="0.1"
+                        value={img2imgStrength}
+                        onChange={(e) => setImg2imgStrength(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        How much to transform the original image (0.1 = subtle, 1.0 = dramatic)
+                      </p>
+                    </div>
+
+                    {/* Guidance Scale */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Guidance Scale: {img2imgGuidanceScale}
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        step="0.5"
+                        value={img2imgGuidanceScale}
+                        onChange={(e) => setImg2imgGuidanceScale(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        How closely to follow the prompt (higher = more adherence)
+                      </p>
+                    </div>
+
+                    {/* Inference Steps */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Inference Steps: {img2imgInferenceSteps}
+                      </label>
+                      <input
+                        type="range"
+                        min="10"
+                        max="100"
+                        step="10"
+                        value={img2imgInferenceSteps}
+                        onChange={(e) => setImg2imgInferenceSteps(parseInt(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        Number of processing steps (higher = better quality, slower)
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* AI Prompt Generator Section */}
