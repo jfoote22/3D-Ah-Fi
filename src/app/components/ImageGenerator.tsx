@@ -155,6 +155,16 @@ export default function ImageGenerator() {
   const [img2imgInferenceSteps, setImg2imgInferenceSteps] = useState(50);
   const [showImg2ImgAdvanced, setShowImg2ImgAdvanced] = useState(false);
 
+  // Clip Drop background removal states
+  const [backgroundRemovalImage, setBackgroundRemovalImage] = useState<string | null>(null);
+  const [backgroundRemovalFile, setBackgroundRemovalFile] = useState<File | null>(null);
+  const [backgroundRemovalPreview, setBackgroundRemovalPreview] = useState<string | null>(null);
+  const [backgroundRemovalResult, setBackgroundRemovalResult] = useState<string | null>(null);
+  const [removingBackground, setRemovingBackground] = useState(false);
+  const [backgroundRemovalError, setBackgroundRemovalError] = useState('');
+  const [clipDropCredits, setClipDropCredits] = useState<number | null>(null);
+  const [transparencyHandling, setTransparencyHandling] = useState('return_input_if_non_opaque');
+
   // Helper function to convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -180,6 +190,29 @@ export default function ImageGenerator() {
     } else {
       setInputImage(null);
       setInputImagePreview(null);
+    }
+  };
+
+  // Handle background removal image change
+  const handleBackgroundRemovalImageChange = async (file: File | null) => {
+    setBackgroundRemovalFile(file);
+    if (file) {
+      try {
+        const base64 = await fileToBase64(file);
+        setBackgroundRemovalImage(base64);
+        setBackgroundRemovalPreview(base64);
+        // Clear previous result when new image is uploaded
+        setBackgroundRemovalResult(null);
+        setBackgroundRemovalError('');
+      } catch (error) {
+        console.error('Error converting file to base64:', error);
+        setBackgroundRemovalError('Failed to process the input image');
+      }
+    } else {
+      setBackgroundRemovalImage(null);
+      setBackgroundRemovalPreview(null);
+      setBackgroundRemovalResult(null);
+      setBackgroundRemovalError('');
     }
   };
 
@@ -456,6 +489,53 @@ export default function ImageGenerator() {
     }
   };
 
+  // Function to remove background using Clip Drop API
+  const removeBackground = async () => {
+    if (!backgroundRemovalFile) {
+      setBackgroundRemovalError('Please upload an image first');
+      return;
+    }
+
+    setRemovingBackground(true);
+    setBackgroundRemovalError('');
+    setBackgroundRemovalResult(null);
+
+    try {
+      console.log('🎨 Starting background removal with Clip Drop...');
+      
+      const formData = new FormData();
+      formData.append('image_file', backgroundRemovalFile);
+      formData.append('transparency_handling', transparencyHandling);
+      
+      const response = await fetch('/api/clipdrop/remove-background', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove background');
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.imageUrl) {
+        throw new Error('No processed image received');
+      }
+
+      setBackgroundRemovalResult(data.imageUrl);
+      setClipDropCredits(data.remainingCredits);
+      console.log('✅ Background removal successful!');
+      console.log(`💳 Credits remaining: ${data.remainingCredits}`);
+      
+    } catch (error) {
+      console.error('❌ Background removal failed:', error);
+      setBackgroundRemovalError(error instanceof Error ? error.message : 'Failed to remove background');
+    } finally {
+      setRemovingBackground(false);
+    }
+  };
+
   // Function to save the image locally (bypass Firebase completely)
   const saveImageToFirebase = async () => {
     console.log('Starting saveImageToFirebase function (using local storage)');
@@ -542,6 +622,13 @@ export default function ImageGenerator() {
     setInputImage(null);
     setInputImageFile(null);
     setInputImagePreview(null);
+    
+    // Clear background removal data
+    setBackgroundRemovalImage(null);
+    setBackgroundRemovalFile(null);
+    setBackgroundRemovalPreview(null);
+    setBackgroundRemovalResult(null);
+    setBackgroundRemovalError('');
     
     // Focus the prompt textarea after clearing
     setTimeout(() => {
@@ -1504,6 +1591,192 @@ export default function ImageGenerator() {
                     <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                   Download Coloring Book
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Clip Drop Background Removal - Standalone Section */}
+        <div className="mb-8 bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
+          <div className="p-6 space-y-5">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-100">Background Removal</h3>
+              <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-green-400 flex items-center border border-slate-700">
+                <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Clip Drop AI
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-400 mb-4">
+              Remove backgrounds from your images with AI precision. Perfect for product photos, portraits, and creative projects.
+            </p>
+
+            {/* Credits Display */}
+            {clipDropCredits !== null && (
+              <div className="bg-green-900/20 border border-green-800 rounded-lg p-3">
+                <p className="text-sm text-green-400 flex items-center">
+                  <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                  </svg>
+                  Credits remaining: {clipDropCredits}
+                </p>
+              </div>
+            )}
+            
+            {/* Image Upload */}
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Upload Image
+              </label>
+              
+              {backgroundRemovalPreview ? (
+                <div className="relative">
+                  <Image
+                    src={backgroundRemovalPreview}
+                    alt="Input for background removal"
+                    width={400}
+                    height={300}
+                    className="w-full h-64 object-cover rounded-lg border border-slate-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleBackgroundRemovalImageChange(null)}
+                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full transition-colors"
+                  >
+                    <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-slate-600 rounded-lg p-8">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleBackgroundRemovalImageChange(e.target.files?.[0] || null)}
+                    className="hidden"
+                    id="background-removal-upload"
+                  />
+                  <label
+                    htmlFor="background-removal-upload"
+                    className="cursor-pointer flex flex-col items-center justify-center text-center"
+                  >
+                    <svg className="w-16 h-16 text-slate-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-slate-400 mb-2">Click to upload an image</p>
+                    <p className="text-xs text-slate-500">PNG, JPG, or WEBP up to 30MB</p>
+                    <p className="text-xs text-slate-500">Max resolution: 25 megapixels</p>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Transparency Handling Option */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-300">
+                Transparency Handling
+              </label>
+              <select
+                value={transparencyHandling}
+                onChange={(e) => setTransparencyHandling(e.target.value)}
+                className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="return_input_if_non_opaque">Return input if already transparent</option>
+                <option value="discard_alpha_layer">Remove existing transparency</option>
+              </select>
+              <p className="text-xs text-slate-500">
+                Choose how to handle images that already have transparency
+              </p>
+            </div>
+            
+            <button
+              onClick={removeBackground}
+              disabled={removingBackground || !backgroundRemovalFile}
+              className={`${removingBackground || !backgroundRemovalFile ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-green-900/60 border border-green-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-green-800/60 transition-all`}
+            >
+              {removingBackground ? (
+                <span className="flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Removing Background with Clip Drop AI...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center">
+                  <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 01-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 01-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L6.414 15H8a1 1 0 010 2H4a1 1 0 01-1-1v-4zm13-1a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.586l-2.293-2.293a1 1 0 111.414-1.414L15 13.586V12a1 1 0 011-1z" clipRule="evenodd" />
+                  </svg>
+                  Remove Background
+                </span>
+              )}
+            </button>
+            
+            {!backgroundRemovalFile && (
+              <div className="flex items-center text-xs text-green-400">
+                <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Please upload an image first
+              </div>
+            )}
+            
+            {backgroundRemovalError && (
+              <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
+                <p className="text-sm text-red-400 flex items-center">
+                  <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  {backgroundRemovalError}
+                </p>
+              </div>
+            )}
+          </div>
+          
+          {backgroundRemovalResult && (
+            <div className="space-y-4 p-6 bg-slate-900 border-t border-slate-700">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Original Image */}
+                <div>
+                  <h4 className="text-sm font-medium text-slate-300 mb-2">Original</h4>
+                  <div className="relative group overflow-hidden rounded-lg shadow-lg border border-slate-700">
+                    <Image
+                      src={backgroundRemovalPreview!}
+                      alt="Original image"
+                      width={300}
+                      height={300}
+                      className="w-full h-auto object-contain bg-white"
+                    />
+                  </div>
+                </div>
+                
+                {/* Background Removed Image */}
+                <div>
+                  <h4 className="text-sm font-medium text-slate-300 mb-2">Background Removed</h4>
+                  <div className="relative group overflow-hidden rounded-lg shadow-lg border border-slate-700">
+                    <div className="bg-gradient-to-br from-slate-200 to-slate-400 p-4">
+                      <Image
+                        src={backgroundRemovalResult}
+                        alt="Background removed image"
+                        width={300}
+                        height={300}
+                        className="w-full h-auto object-contain"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => downloadFile(backgroundRemovalResult, generateFilename('background-removed-image', 'image'))}
+                className="block w-full bg-green-900/60 border border-green-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-green-800/60 text-center transition-all"
+              >
+                <span className="flex items-center justify-center">
+                  <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Download Image
                 </span>
               </button>
             </div>
