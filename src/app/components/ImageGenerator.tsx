@@ -61,9 +61,24 @@ const generateFilename = (prompt: string, type: 'image' | 'coloring' | '3d') => 
   return `${type}-${cleanPrompt}-${timestamp}.${extension}`;
 };
 
-// Helper function to download files via our API (handles CORS issues)
+// Helper function to download files via our API (handles CORS issues) or directly for blob URLs
 const downloadFile = async (url: string, filename: string) => {
   try {
+    // Check if it's a blob URL (client-side only)
+    if (url.startsWith('blob:')) {
+      console.log('Downloading blob URL directly:', url);
+      // For blob URLs, download directly without going through the API
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+
+    // For regular HTTP URLs, use the API to handle CORS issues
+    console.log('Downloading HTTP URL via API:', url);
     const downloadUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
     const link = document.createElement('a');
     link.href = downloadUrl;
@@ -74,12 +89,17 @@ const downloadFile = async (url: string, filename: string) => {
   } catch (error) {
     console.error('Download failed:', error);
     // Fallback to direct download
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (fallbackError) {
+      console.error('Fallback download also failed:', fallbackError);
+      alert('Download failed. Please try right-clicking the image and selecting "Save As..."');
+    }
   }
 };
 
