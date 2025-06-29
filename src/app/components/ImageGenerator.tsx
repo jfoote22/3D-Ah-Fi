@@ -165,6 +165,11 @@ export default function ImageGenerator() {
   const [clipDropCredits, setClipDropCredits] = useState<number | null>(null);
   const [transparencyHandling, setTransparencyHandling] = useState('return_input_if_non_opaque');
 
+  // Generated image background removal states
+  const [generatedImageBgRemovalResult, setGeneratedImageBgRemovalResult] = useState<string | null>(null);
+  const [removingGeneratedImageBg, setRemovingGeneratedImageBg] = useState(false);
+  const [generatedImageBgRemovalError, setGeneratedImageBgRemovalError] = useState('');
+
   // Helper function to convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -536,6 +541,53 @@ export default function ImageGenerator() {
     }
   };
 
+  // Function to remove background from generated image
+  const removeGeneratedImageBackground = async () => {
+    if (!imageUrl) {
+      setGeneratedImageBgRemovalError('No generated image available');
+      return;
+    }
+
+    setRemovingGeneratedImageBg(true);
+    setGeneratedImageBgRemovalError('');
+    setGeneratedImageBgRemovalResult(null);
+
+    try {
+      console.log('🎨 Starting background removal for generated image...');
+      
+      // Convert image URL to blob/file
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'generated-image.png', { type: 'image/png' });
+      
+      const formData = new FormData();
+      formData.append('image_file', file);
+      formData.append('transparency_handling', 'return_input_if_non_opaque');
+      
+      const bgRemovalResponse = await fetch('/api/clipdrop/remove-background', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!bgRemovalResponse.ok) {
+        const errorData = await bgRemovalResponse.json();
+        throw new Error(errorData.error || `HTTP error! status: ${bgRemovalResponse.status}`);
+      }
+
+      const blob2 = await bgRemovalResponse.blob();
+      const resultUrl = URL.createObjectURL(blob2);
+      
+      setGeneratedImageBgRemovalResult(resultUrl);
+      console.log('✅ Background removed from generated image successfully');
+      
+    } catch (error) {
+      console.error('❌ Generated image background removal failed:', error);
+      setGeneratedImageBgRemovalError(error instanceof Error ? error.message : 'Failed to remove background from generated image');
+    } finally {
+      setRemovingGeneratedImageBg(false);
+    }
+  };
+
   // Function to save the image locally (bypass Firebase completely)
   const saveImageToFirebase = async () => {
     console.log('Starting saveImageToFirebase function (using local storage)');
@@ -629,6 +681,10 @@ export default function ImageGenerator() {
     setBackgroundRemovalPreview(null);
     setBackgroundRemovalResult(null);
     setBackgroundRemovalError('');
+    
+    // Clear generated image background removal data
+    setGeneratedImageBgRemovalResult(null);
+    setGeneratedImageBgRemovalError('');
     
     // Focus the prompt textarea after clearing
     setTimeout(() => {
@@ -2173,6 +2229,124 @@ export default function ImageGenerator() {
                   </div>
                 )}
               </div>
+              
+              {/* Background Removal for Generated Image */}
+              {imageUrl && (
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
+                  <div className="p-6 space-y-5">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-xl font-bold text-slate-100">Remove Background</h3>
+                      <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-green-400 flex items-center border border-slate-700">
+                        <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-8-8a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Clip Drop AI
+                      </div>
+                    </div>
+                    
+                    <p className="text-sm text-slate-400 mb-4">
+                      Remove the background from your generated image using Clip Drop&apos;s AI-powered background removal.
+                    </p>
+                    
+                    <button
+                      onClick={removeGeneratedImageBackground}
+                      disabled={removingGeneratedImageBg}
+                      className={`${removingGeneratedImageBg ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition-all`}
+                    >
+                      {removingGeneratedImageBg ? (
+                        <span className="flex items-center justify-center">
+                          <svg className="w-4 h-4 mr-2 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Removing Background...
+                        </span>
+                      ) : (
+                        <span className="flex items-center justify-center">
+                          <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-8-8a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Remove Background
+                        </span>
+                      )}
+                    </button>
+                    
+                    {generatedImageBgRemovalError && (
+                      <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
+                        <p className="text-sm text-red-400 flex items-center">
+                          <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                          {generatedImageBgRemovalError}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {removingGeneratedImageBg && (
+                      <div className="flex justify-center items-center py-6">
+                        <div className="text-center">
+                          <div className="relative">
+                            <div className="w-16 h-16 mb-4 mx-auto rounded bg-gradient-to-tr from-green-500 to-emerald-600 animate-pulse blur-sm absolute inset-0"></div>
+                            <div className="w-16 h-16 mb-4 mx-auto rounded bg-slate-900 backdrop-blur flex items-center justify-center relative z-10">
+                              <svg className="w-8 h-8 text-green-400 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            </div>
+                          </div>
+                          <p className="text-green-400 font-medium text-sm">Removing background...</p>
+                          <p className="text-slate-500 text-xs mt-1">This may take a few seconds</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {generatedImageBgRemovalResult && !removingGeneratedImageBg && (
+                    <div className="space-y-4 p-6 bg-slate-900 border-t border-slate-700">
+                      <div className="relative group">
+                        <Image
+                          src={generatedImageBgRemovalResult}
+                          alt="Generated image with background removed"
+                          width={400}
+                          height={400}
+                          className="w-full h-auto rounded-lg border border-slate-700 shadow-sm"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                          <div className="absolute bottom-2 left-2 bg-slate-900/80 text-white px-2 py-1 rounded text-xs">
+                            Background Removed
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 text-sm">
+                        <h4 className="font-semibold text-slate-200 mb-3">Background Removal Details</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-green-400 text-xs mb-1">Tool Used</p>
+                            <p className="font-medium text-slate-300">Clip Drop AI</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-green-400 text-xs mb-1">Format</p>
+                            <p className="font-medium text-slate-300">PNG with transparency</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => downloadFile(generatedImageBgRemovalResult, generateFilename(prompt, 'image').replace('.png', '_no_bg.png'))}
+                        className="block w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg text-center transition-all"
+                      >
+                        <span className="flex items-center justify-center">
+                          <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Download Image (No Background)
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
