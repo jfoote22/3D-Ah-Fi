@@ -155,15 +155,10 @@ export async function POST(request: Request) {
     }
 
     // Validate image URL
-    try {
-      const url = new URL(imageUrl);
-      if (!url.protocol.startsWith('http')) {
-        throw new Error('Invalid protocol');
-      }
-    } catch (error) {
-      logProgress(requestId, 'Error: Invalid image URL', error);
+    if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:image/')) {
+      logProgress(requestId, 'Error: Invalid image URL - must be HTTP(S) or data URL');
       return NextResponse.json(
-        { error: 'Invalid image URL provided' },
+        { error: 'Invalid image URL provided - must be HTTP(S) or data URL' },
         { status: 400 }
       );
     }

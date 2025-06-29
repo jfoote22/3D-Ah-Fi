@@ -379,7 +379,10 @@ export default function ImageGenerator() {
 
   // Function to generate 3D model from the current image
   const generate3DModel = async () => {
-    if (!imageUrl) {
+    // Prioritize background-removed image, fall back to original generated image
+    const sourceImageUrl = generatedImageBgRemovalResult || imageUrl;
+    
+    if (!sourceImageUrl) {
       setModel3DError('Please generate an image first');
       return;
     }
@@ -389,7 +392,8 @@ export default function ImageGenerator() {
     setServerError(null);
 
     try {
-      console.log('Starting 3D model generation with image:', imageUrl);
+      const imageType = generatedImageBgRemovalResult ? 'background-removed' : 'original';
+      console.log(`Starting 3D model generation with ${imageType} image:`, sourceImageUrl);
       
       const response = await fetch('/api/generate-3d', {
         method: 'POST',
@@ -397,7 +401,7 @@ export default function ImageGenerator() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrl,
+          imageUrl: sourceImageUrl,
           prompt: prompt || "A detailed 3D model"
         }),
       });
@@ -554,13 +558,19 @@ export default function ImageGenerator() {
 
       // The response is now directly the image blob
       const imageBlob = await response.blob();
-      const resultUrl = URL.createObjectURL(imageBlob);
+      
+      // Convert blob to data URL instead of blob URL for server compatibility
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(imageBlob);
+      });
       
       // Get credit information from headers
       const remainingCredits = response.headers.get('x-remaining-credits');
       const creditsConsumed = response.headers.get('x-credits-consumed');
       
-      setBackgroundRemovalResult(resultUrl);
+      setBackgroundRemovalResult(dataUrl);
       
       if (remainingCredits) {
         console.log(`💳 Credits remaining: ${remainingCredits}, Credits consumed: ${creditsConsumed}`);
@@ -619,7 +629,13 @@ export default function ImageGenerator() {
 
       // The response is now directly the image blob
       const imageBlob = await bgRemovalResponse.blob();
-      const resultUrl = URL.createObjectURL(imageBlob);
+      
+      // Convert blob to data URL instead of blob URL for server compatibility
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(imageBlob);
+      });
       
       // Get credit information from headers
       const remainingCredits = bgRemovalResponse.headers.get('x-remaining-credits');
@@ -630,7 +646,7 @@ export default function ImageGenerator() {
         setClipDropCredits(parseInt(remainingCredits));
       }
       
-      setGeneratedImageBgRemovalResult(resultUrl);
+      setGeneratedImageBgRemovalResult(dataUrl);
       console.log('✅ Background removed from generated image successfully');
       
     } catch (error) {
@@ -2126,6 +2142,8 @@ export default function ImageGenerator() {
             </div>
             
             <div className="lg:col-span-2 space-y-6">
+
+
               {/* 3D Model Generation Section */}
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
                 <div className="p-6 space-y-5">
@@ -2141,6 +2159,15 @@ export default function ImageGenerator() {
                   
                   <p className="text-sm text-slate-400 mb-4">
                     Transform your image into a detailed 3D model with Tencent&apos;s advanced Hunyuan3D-2 technology.
+                    {generatedImageBgRemovalResult ? (
+                      <span className="block mt-2 text-green-400 text-xs">
+                        ✓ Will use background-removed image for 3D generation
+                      </span>
+                    ) : (
+                      <span className="block mt-2 text-blue-400 text-xs">
+                        Will use original generated image for 3D generation
+                      </span>
+                    )}
                   </p>
                   
                   <button
