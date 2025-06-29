@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { thing, action, negativePrompt } = await request.json();
+    const { thing, action, style, negativePrompt } = await request.json();
 
     if (!thing || !action) {
       return NextResponse.json(
@@ -23,20 +23,23 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("Coloring Book API - Generating prompt for:", { thing, action });
+    console.log("Coloring Book API - Generating prompt for:", { thing, action, style });
 
-    // Use Claude to generate a coloring book prompt
+    // Create the prompt with variable substitution
+    const promptTemplate = `A ${thing} ${action} in the style of ${style || 'cartoon'}, drawn in clean black and white line art style, similar to comic graphic novels or to children's coloring books. No shading or color, just bold outlines, centered, on a white background.`;
+
+    // Use Claude to generate a coloring book prompt with updated parameters
     const message = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 2000,
-      temperature: 0.7,
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 20000,
+      temperature: 1,
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Please create a detailed image generation prompt for: A ${thing} ${action}. The prompt should describe this as a clean black and white line art drawing suitable for a children's coloring book. Include details about simple bold outlines, no shading or colors, clean simple style, centered on white background. Make it a clear, detailed prompt that will generate a great coloring page when used with an AI image generator.`
+              text: promptTemplate
             }
           ]
         }
@@ -84,7 +87,8 @@ export async function POST(request: Request) {
       imageUrl: imageData.imageUrl,
       thing,
       action,
-      model: "Claude + Imagen-4-Fast",
+      style: style || 'cartoon',
+      model: "Claude Sonnet 4 + Imagen-4-Fast",
       generationTime: imageData.generationTime
     });
 

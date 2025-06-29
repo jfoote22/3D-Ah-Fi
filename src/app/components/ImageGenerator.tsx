@@ -125,6 +125,7 @@ export default function ImageGenerator() {
   // Coloring book parameters for Anthropic workflow
   const [coloringBookThing, setColoringBookThing] = useState('');
   const [coloringBookAction, setColoringBookAction] = useState('');
+  const [coloringBookStyle, setColoringBookStyle] = useState('');
   const [coloringBookNegativePrompt, setColoringBookNegativePrompt] = useState('');
   const [generatedColoringPrompt, setGeneratedColoringPrompt] = useState('');
 
@@ -452,12 +453,14 @@ export default function ImageGenerator() {
     try {
       console.log('Starting coloring book generation with Anthropic:', { 
         thing: coloringBookThing, 
-        action: coloringBookAction 
+        action: coloringBookAction,
+        style: coloringBookStyle
       });
       
       const requestBody = {
         thing: coloringBookThing,
         action: coloringBookAction,
+        ...(coloringBookStyle && { style: coloringBookStyle }),
         ...(coloringBookNegativePrompt && { negativePrompt: coloringBookNegativePrompt })
       };
 
@@ -754,6 +757,7 @@ export default function ImageGenerator() {
   const clearColoringBookInputs = () => {
     setColoringBookThing('');
     setColoringBookAction('');
+    setColoringBookStyle('');
     setColoringBookNegativePrompt('');
     setGeneratedColoringPrompt('');
   };
@@ -1574,6 +1578,23 @@ export default function ImageGenerator() {
                 </div>
               </div>
 
+              {/* Style Input */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Style <span className="text-xs text-slate-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={coloringBookStyle}
+                  onChange={(e) => setColoringBookStyle(e.target.value)}
+                  placeholder="e.g., cartoon, realistic, whimsical, detailed, simple"
+                  className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Specify the drawing style (defaults to &quot;cartoon&quot; if not provided)
+                </p>
+              </div>
+
               {/* Negative Prompt for Coloring Book */}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -1596,7 +1617,7 @@ export default function ImageGenerator() {
                 <p className="text-xs text-slate-400">
                   Claude AI will generate a detailed coloring book prompt
                 </p>
-                {(coloringBookThing || coloringBookAction || coloringBookNegativePrompt) && (
+                {(coloringBookThing || coloringBookAction || coloringBookStyle || coloringBookNegativePrompt) && (
                   <button
                     type="button"
                     onClick={clearColoringBookInputs}
@@ -1669,7 +1690,7 @@ export default function ImageGenerator() {
               </div>
               
               <button 
-                onClick={() => downloadFile(coloringBookUrl, generateFilename(`${coloringBookThing} ${coloringBookAction}`, 'coloring'))}
+                onClick={() => downloadFile(coloringBookUrl, generateFilename(`${coloringBookThing} ${coloringBookAction}${coloringBookStyle ? ` ${coloringBookStyle}` : ''}`, 'coloring'))}
                 className="block w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 text-center transition-all"
               >
                 <span className="flex items-center justify-center">
