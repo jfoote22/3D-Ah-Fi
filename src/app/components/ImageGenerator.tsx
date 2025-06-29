@@ -518,20 +518,33 @@ export default function ImageGenerator() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to remove background');
+        // Handle error response
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        } else {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}: ${errorText}`);
+        }
       }
 
-      const data = await response.json();
+      // The response is now directly the image blob
+      const imageBlob = await response.blob();
+      const resultUrl = URL.createObjectURL(imageBlob);
       
-      if (!data.success || !data.imageUrl) {
-        throw new Error('No processed image received');
+      // Get credit information from headers
+      const remainingCredits = response.headers.get('x-remaining-credits');
+      const creditsConsumed = response.headers.get('x-credits-consumed');
+      
+      setBackgroundRemovalResult(resultUrl);
+      
+      if (remainingCredits) {
+        console.log(`💳 Credits remaining: ${remainingCredits}, Credits consumed: ${creditsConsumed}`);
+        setClipDropCredits(parseInt(remainingCredits));
       }
-
-      setBackgroundRemovalResult(data.imageUrl);
-      setClipDropCredits(data.remainingCredits);
+      
       console.log('✅ Background removal successful!');
-      console.log(`💳 Credits remaining: ${data.remainingCredits}`);
       
     } catch (error) {
       console.error('❌ Background removal failed:', error);
@@ -570,12 +583,29 @@ export default function ImageGenerator() {
       });
 
       if (!bgRemovalResponse.ok) {
-        const errorData = await bgRemovalResponse.json();
-        throw new Error(errorData.error || `HTTP error! status: ${bgRemovalResponse.status}`);
+        // Handle error response
+        const contentType = bgRemovalResponse.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await bgRemovalResponse.json();
+          throw new Error(errorData.error || `HTTP error! status: ${bgRemovalResponse.status}`);
+        } else {
+          const errorText = await bgRemovalResponse.text();
+          throw new Error(`HTTP error! status: ${bgRemovalResponse.status}: ${errorText}`);
+        }
       }
 
-      const blob2 = await bgRemovalResponse.blob();
-      const resultUrl = URL.createObjectURL(blob2);
+      // The response is now directly the image blob
+      const imageBlob = await bgRemovalResponse.blob();
+      const resultUrl = URL.createObjectURL(imageBlob);
+      
+      // Get credit information from headers
+      const remainingCredits = bgRemovalResponse.headers.get('x-remaining-credits');
+      const creditsConsumed = bgRemovalResponse.headers.get('x-credits-consumed');
+      
+      if (remainingCredits) {
+        console.log(`💳 Credits remaining: ${remainingCredits}, Credits consumed: ${creditsConsumed}`);
+        setClipDropCredits(parseInt(remainingCredits));
+      }
       
       setGeneratedImageBgRemovalResult(resultUrl);
       console.log('✅ Background removed from generated image successfully');

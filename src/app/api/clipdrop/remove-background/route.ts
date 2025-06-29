@@ -49,9 +49,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: errorMessage }, { status: response.status });
     }
 
-    // Get the processed image as array buffer
-    const imageBuffer = await response.arrayBuffer();
-    
     // Get credit information from headers
     const remainingCredits = response.headers.get('x-remaining-credits');
     const creditsConsumed = response.headers.get('x-credits-consumed');
@@ -59,16 +56,20 @@ export async function POST(req: NextRequest) {
     console.log('✅ Background removal successful!');
     console.log(`💳 Credits remaining: ${remainingCredits}, Credits consumed: ${creditsConsumed}`);
 
-    // Convert buffer to base64 for client use
-    const base64Image = Buffer.from(imageBuffer).toString('base64');
+    // Return the image directly as a blob response
     const contentType = response.headers.get('content-type') || 'image/png';
-    const dataUrl = `data:${contentType};base64,${base64Image}`;
+    const imageBlob = await response.blob();
+    
+    // Create a response with the image data and credit headers
+    const responseHeaders = new Headers({
+      'Content-Type': contentType,
+      'x-remaining-credits': remainingCredits || '0',
+      'x-credits-consumed': creditsConsumed || '1',
+    });
 
-    return NextResponse.json({
-      success: true,
-      imageUrl: dataUrl,
-      remainingCredits: remainingCredits ? parseInt(remainingCredits) : null,
-      creditsConsumed: creditsConsumed ? parseInt(creditsConsumed) : null,
+    return new Response(imageBlob, {
+      status: 200,
+      headers: responseHeaders,
     });
 
   } catch (error) {
