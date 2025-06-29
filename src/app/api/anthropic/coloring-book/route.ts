@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { thing, action } = await request.json();
+    const { thing, action, negativePrompt } = await request.json();
 
     if (!thing || !action) {
       return NextResponse.json(
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
           content: [
             {
               type: "text",
-              text: `A ${thing} ${action}, drawn in clean black and white line art style, suitable for a children's coloring book. No shading or color, just bold outlines, centered, on a white background.`
+              text: `Please create a detailed image generation prompt for: A ${thing} ${action}. The prompt should describe this as a clean black and white line art drawing suitable for a children's coloring book. Include details about simple bold outlines, no shading or colors, clean simple style, centered on white background. Make it a clear, detailed prompt that will generate a great coloring page when used with an AI image generator.`
             }
           ]
         }
@@ -50,6 +50,14 @@ export async function POST(request: Request) {
 
     console.log("Coloring Book API - Generated prompt:", generatedPrompt);
 
+    // Prepare the negative prompt - combine user's negative prompt with coloring book defaults
+    const defaultColoringNegative = 'colors, shading, photorealistic, realistic, painting, complex backgrounds, detailed textures';
+    const finalNegativePrompt = negativePrompt 
+      ? `${defaultColoringNegative}, ${negativePrompt}` 
+      : defaultColoringNegative;
+
+    console.log("Coloring Book API - Using negative prompt:", finalNegativePrompt);
+
     // Now generate the actual image using the text-to-image API
     const imageResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/generate-image`, {
       method: 'POST',
@@ -60,7 +68,7 @@ export async function POST(request: Request) {
         prompt: generatedPrompt,
         aspect_ratio: '1:1',
         numberOfImages: 1,
-        negativePrompt: 'colors, shading, photorealistic, realistic, painting, complex backgrounds, detailed textures'
+        negativePrompt: finalNegativePrompt
       }),
     });
 

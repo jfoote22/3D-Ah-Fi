@@ -125,6 +125,7 @@ export default function ImageGenerator() {
   // Coloring book parameters for Anthropic workflow
   const [coloringBookThing, setColoringBookThing] = useState('');
   const [coloringBookAction, setColoringBookAction] = useState('');
+  const [coloringBookNegativePrompt, setColoringBookNegativePrompt] = useState('');
   const [generatedColoringPrompt, setGeneratedColoringPrompt] = useState('');
 
   // For Anthropic prompt generation
@@ -418,7 +419,8 @@ export default function ImageGenerator() {
       
       const requestBody = {
         thing: coloringBookThing,
-        action: coloringBookAction
+        action: coloringBookAction,
+        ...(coloringBookNegativePrompt && { negativePrompt: coloringBookNegativePrompt })
       };
 
       console.log('Coloring book request body:', requestBody);
@@ -533,6 +535,7 @@ export default function ImageGenerator() {
     setColoringBookError('');
     setColoringBookThing('');
     setColoringBookAction('');
+    setColoringBookNegativePrompt('');
     setGeneratedColoringPrompt('');
     
     // Clear image-to-image data
@@ -578,6 +581,7 @@ export default function ImageGenerator() {
   const clearColoringBookInputs = () => {
     setColoringBookThing('');
     setColoringBookAction('');
+    setColoringBookNegativePrompt('');
     setGeneratedColoringPrompt('');
   };
 
@@ -1348,6 +1352,162 @@ export default function ImageGenerator() {
           </div>
         </form>
 
+        {/* AI Coloring Book Creator - Standalone Section */}
+        <div className="mb-8 bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
+          <div className="p-6 space-y-5">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-100">AI Coloring Book Creator</h3>
+              <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-purple-400 flex items-center border border-slate-700">
+                <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 10-2 0 1 1 0 002 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                Claude AI
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-400 mb-4">
+              Use Claude AI to generate custom coloring book pages from your ideas. Perfect for kids and creative projects.
+            </p>
+            
+            {/* Anthropic Coloring Book Inputs */}
+            <div className="space-y-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Subject (What to draw)
+                  </label>
+                  <input
+                    type="text"
+                    value={coloringBookThing}
+                    onChange={(e) => setColoringBookThing(e.target.value)}
+                    placeholder="e.g., cat, dragon, castle, flower"
+                    className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Action (What it's doing)
+                  </label>
+                  <input
+                    type="text"
+                    value={coloringBookAction}
+                    onChange={(e) => setColoringBookAction(e.target.value)}
+                    placeholder="e.g., sitting, flying, dancing, sleeping"
+                    className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* Negative Prompt for Coloring Book */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Negative Prompt 
+                  <span className="text-xs text-slate-400 ml-2">(What to avoid)</span>
+                </label>
+                <textarea
+                  value={coloringBookNegativePrompt}
+                  onChange={(e) => setColoringBookNegativePrompt(e.target.value)}
+                  placeholder="e.g., text, words, complex details, realistic faces..."
+                  className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500 resize-none"
+                  rows={2}
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Additional items to exclude from the coloring book (automatically excludes colors and shading)
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-400">
+                  Claude AI will generate a detailed coloring book prompt
+                </p>
+                {(coloringBookThing || coloringBookAction || coloringBookNegativePrompt) && (
+                  <button
+                    type="button"
+                    onClick={clearColoringBookInputs}
+                    className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+                  >
+                    Clear inputs
+                  </button>
+                )}
+              </div>
+
+              {generatedColoringPrompt && (
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
+                  <h4 className="text-sm font-medium text-orange-300 mb-2">Generated Prompt</h4>
+                  <p className="text-sm text-slate-300">{generatedColoringPrompt}</p>
+                </div>
+              )}
+            </div>
+            
+            <button
+              onClick={generateColoringBook}
+              disabled={generatingColoringBook || !coloringBookThing || !coloringBookAction}
+              className={`${generatingColoringBook || !coloringBookThing || !coloringBookAction ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 transition-all`}
+            >
+              {generatingColoringBook ? (
+                <span className="flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating Coloring Book with Claude AI...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center">
+                  <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zM3 15a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zm6-11a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm6 3a1 1 0 011-1h1a1 1 0 011 1v7a1 1 0 01-1 1h-1a1 1 0 01-1-1V7z" clipRule="evenodd" />
+                  </svg>
+                  Generate Coloring Book
+                </span>
+              )}
+            </button>
+            
+            {(!coloringBookThing || !coloringBookAction) && (
+              <div className="flex items-center text-xs text-orange-400">
+                <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Please enter both subject and action
+              </div>
+            )}
+            
+            {coloringBookError && (
+              <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
+                <p className="text-sm text-red-400 flex items-center">
+                  <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  {coloringBookError}
+                </p>
+              </div>
+            )}
+          </div>
+          
+          {coloringBookUrl && (
+            <div className="space-y-4 p-6 bg-slate-900 border-t border-slate-700">
+              <div className="relative group overflow-hidden rounded-lg shadow-lg border border-slate-700">
+                <Image
+                  src={coloringBookUrl}
+                  alt="Generated coloring book image"
+                  width={400}
+                  height={400}
+                  className="w-full h-auto object-contain bg-white"
+                />
+              </div>
+              
+              <button 
+                onClick={() => downloadFile(coloringBookUrl, generateFilename(`${coloringBookThing} ${coloringBookAction}`, 'coloring'))}
+                className="block w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 text-center transition-all"
+              >
+                <span className="flex items-center justify-center">
+                  <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Download Coloring Book
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {error && (
           <div className="mb-8 overflow-hidden rounded-lg border border-red-900">
             <div className="bg-red-900/30 px-4 py-3 flex justify-between items-center">
@@ -1564,144 +1724,6 @@ export default function ImageGenerator() {
             </div>
             
             <div className="lg:col-span-2 space-y-6">
-              {/* Coloring Book Generation Section */}
-              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
-                <div className="p-6 space-y-5">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-slate-100">AI Coloring Book Creator</h3>
-                    <div className="bg-slate-900 rounded-lg px-3 py-1 text-xs font-medium text-purple-400 flex items-center border border-slate-700">
-                      <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 10-2 0 1 1 0 002 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                      Claude AI
-                    </div>
-                  </div>
-                  
-                  <p className="text-sm text-slate-400 mb-4">
-                    Use Claude AI to generate custom coloring book pages from your ideas. Perfect for kids and creative projects.
-                  </p>
-                  
-                  {/* Anthropic Coloring Book Inputs */}
-                  <div className="space-y-4 mb-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                          Subject (What to draw)
-                        </label>
-                        <input
-                          type="text"
-                          value={coloringBookThing}
-                          onChange={(e) => setColoringBookThing(e.target.value)}
-                          placeholder="e.g., cat, dragon, castle, flower"
-                          className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                          Action (What it's doing)
-                        </label>
-                        <input
-                          type="text"
-                          value={coloringBookAction}
-                          onChange={(e) => setColoringBookAction(e.target.value)}
-                          placeholder="e.g., sitting, flying, dancing, sleeping"
-                          className="w-full p-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder-slate-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-400">
-                        Claude AI will generate a detailed coloring book prompt
-                      </p>
-                      {(coloringBookThing || coloringBookAction) && (
-                        <button
-                          type="button"
-                          onClick={clearColoringBookInputs}
-                          className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
-                        >
-                          Clear inputs
-                        </button>
-                      )}
-                    </div>
-
-                    {generatedColoringPrompt && (
-                      <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
-                        <h4 className="text-sm font-medium text-orange-300 mb-2">Generated Prompt</h4>
-                        <p className="text-sm text-slate-300">{generatedColoringPrompt}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <button
-                    onClick={generateColoringBook}
-                    disabled={generatingColoringBook || !coloringBookThing || !coloringBookAction}
-                    className={`${generatingColoringBook || !coloringBookThing || !coloringBookAction ? 'opacity-50 cursor-not-allowed' : ''} w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 transition-all`}
-                  >
-                    {generatingColoringBook ? (
-                      <span className="flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Creating Coloring Book with Claude AI...
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center">
-                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zM3 15a1 1 0 011-1h1a1 1 0 011 1v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1zm6-11a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm6 3a1 1 0 011-1h1a1 1 0 011 1v7a1 1 0 01-1 1h-1a1 1 0 01-1-1V7z" clipRule="evenodd" />
-                        </svg>
-                        Generate Coloring Book
-                      </span>
-                    )}
-                  </button>
-                  
-                  {(!coloringBookThing || !coloringBookAction) && (
-                    <div className="flex items-center text-xs text-orange-400">
-                      <svg className="w-3 h-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      Please enter both subject and action
-                    </div>
-                  )}
-                  
-                  {coloringBookError && (
-                    <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
-                      <p className="text-sm text-red-400 flex items-center">
-                        <svg className="w-4 h-4 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                        {coloringBookError}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                
-                {coloringBookUrl && (
-                  <div className="space-y-4 p-6 bg-slate-900 border-t border-slate-700">
-                    <div className="relative group overflow-hidden rounded-lg shadow-lg border border-slate-700">
-                      <Image
-                        src={coloringBookUrl}
-                        alt="Generated coloring book image"
-                        width={400}
-                        height={400}
-                        className="w-full h-auto object-contain bg-white"
-                      />
-                    </div>
-                    
-                    <button 
-                      onClick={() => downloadFile(coloringBookUrl, generateFilename(`${coloringBookThing} ${coloringBookAction}`, 'coloring'))}
-                      className="block w-full bg-orange-900/60 border border-orange-700/60 text-white font-medium py-3 px-6 rounded-lg shadow-md hover:bg-orange-800/60 text-center transition-all"
-                    >
-                      <span className="flex items-center justify-center">
-                        <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 00-1.414-1.414L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                        Download Coloring Book
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* 3D Model Generation Section */}
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg shadow-sm overflow-hidden">
                 <div className="p-6 space-y-5">
