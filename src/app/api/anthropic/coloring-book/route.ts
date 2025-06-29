@@ -1,14 +1,29 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import Replicate from "replicate";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
+
+// Set max duration for Vercel
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY environment variable is not set" },
+      { status: 500 }
+    );
+  }
+
+  if (!process.env.REPLICATE_API_TOKEN) {
+    return NextResponse.json(
+      { error: "REPLICATE_API_TOKEN environment variable is not set" },
       { status: 500 }
     );
   }
@@ -30,8 +45,8 @@ export async function POST(request: Request) {
 
     // Use Claude to generate a coloring book prompt with updated parameters
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 20000,
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 4000,
       temperature: 1,
       messages: [
         {
@@ -39,7 +54,16 @@ export async function POST(request: Request) {
           content: [
             {
               type: "text",
-              text: promptTemplate
+              text: `You are an expert prompt engineer for AI image generation. Create a detailed, professional prompt for generating a coloring book style image based on this request: "${promptTemplate}". 
+
+The output should be a clean black and white line art illustration perfect for a children's coloring book. Focus on:
+- Bold, clean outlines with no shading or fill
+- Simple shapes suitable for coloring
+- Child-friendly and appealing design
+- Pure white background
+- Solid black lines of even thickness
+
+Return only the image generation prompt, nothing else.`
             }
           ]
         }
@@ -61,41 +85,55 @@ export async function POST(request: Request) {
 
     console.log("Coloring Book API - Using negative prompt:", finalNegativePrompt);
 
-    // Now generate the actual image using the text-to-image API
-    const imageResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/generate-image`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // Generate the image directly using Replicate (avoiding internal API calls)
+    const startTime = Date.now();
+    
+    const output = await replicate.run("google/imagen-4-fast", {
+      input: {
         prompt: generatedPrompt,
-        aspect_ratio: '1:1',
-        numberOfImages: 1,
-        negativePrompt: finalNegativePrompt
-      }),
+        aspect_ratio: "1:1",
+        negative_prompt: finalNegativePrompt
+      }
     });
 
-    if (!imageResponse.ok) {
-      const errorData = await imageResponse.json();
-      throw new Error(errorData.error || 'Failed to generate coloring book image');
-    }
+    const generationTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    
+    const imageUrl = Array.isArray(output) ? output[0] : output;
 
-    const imageData = await imageResponse.json();
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      throw new Error('Failed to generate image - no valid URL returned');
+    }
 
     return NextResponse.json({
       generatedPrompt,
-      imageUrl: imageData.imageUrl,
+      imageUrl,
       thing,
       action,
       style: style || 'cartoon',
-      model: "Claude Sonnet 4 + Imagen-4-Fast",
-      generationTime: imageData.generationTime
+      model: "Claude 3.5 Sonnet + Imagen-4-Fast",
+      generationTime: `${generationTime}s`
     });
 
   } catch (error) {
     console.error("Error in Anthropic Coloring Book API:", error);
+    
+    // Enhanced error logging for debugging
+    if (error instanceof Error) {
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+    }
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate coloring book" },
+      { 
+        error: error instanceof Error ? error.message : "Failed to generate coloring book",
+        debug: process.env.NODE_ENV === 'development' ? {
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+          stack: error instanceof Error ? error.stack : undefined
+        } : undefined
+      },
       { status: 500 }
     );
   }
