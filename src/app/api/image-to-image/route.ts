@@ -80,13 +80,13 @@ export async function POST(req: Request) {
       // Start timing
       const startTime = Date.now();
       
-      // Prepare input params for SDXL image-to-image
+      // Prepare input params for SDXL image-to-image with optimized defaults for speed
       const inputParams: any = {
         prompt,
         image,
-        strength, // How much to transform the original image (0.0-1.0)
-        guidance_scale, // How much to follow the prompt
-        num_inference_steps, // Number of denoising steps
+        strength: Math.min(strength, 0.8), // Cap strength to prevent over-processing
+        guidance_scale: Math.min(guidance_scale, 7.5), // Optimize guidance scale
+        num_inference_steps: Math.min(num_inference_steps, 30), // Reduce steps for faster generation
         scheduler: "K_EULER",
       };
 
@@ -103,13 +103,22 @@ export async function POST(req: Request) {
         image: `${inputParams.image.substring(0, 50)}...` // Truncate image data for logging
       });
       
-      // Use SDXL model for image-to-image
+      // Use SDXL model for image-to-image with timeout handling
       let output;
       try {
         console.log(`[DEBUG][Request #${currentRequest}] Calling Replicate API with model ID: ${MODEL_ID}`);
-        output = await replicate.run(MODEL_ID, {
+        
+        // Create a timeout promise (45 seconds for Vercel Pro, 8 seconds for hobby)
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout - image generation took too long')), 45000); // 45 seconds
+        });
+        
+        // Race between the API call and timeout
+        const apiCall = replicate.run(MODEL_ID, {
           input: inputParams
-        }) as unknown as string[];
+        }) as Promise<string[]>;
+        
+        output = await Promise.race([apiCall, timeoutPromise]) as string[];
         
         console.log(`[DEBUG][Request #${currentRequest}] Replicate API call successful`);
         console.log(`[DEBUG][Request #${currentRequest}] Received output type:`, typeof output);
@@ -130,7 +139,12 @@ export async function POST(req: Request) {
         const errorMessage = replicateError instanceof Error ? replicateError.message : String(replicateError);
         console.error(`[DEBUG][Request #${currentRequest}] Error message:`, errorMessage);
         
-        if (errorMessage.includes('402') || errorMessage.includes('Payment Required')) {
+        if (errorMessage.includes('timeout') || errorMessage.includes('Request timeout')) {
+          return NextResponse.json(
+            { error: 'Image generation is taking too long. Try reducing the inference steps or using a simpler prompt.' },
+            { status: 408 }
+          );
+        } else if (errorMessage.includes('402') || errorMessage.includes('Payment Required')) {
           return NextResponse.json(
             { error: 'Payment required for this model. Please set up billing on Replicate.' },
             { status: 402 }

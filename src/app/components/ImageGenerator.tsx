@@ -149,10 +149,10 @@ export default function ImageGenerator() {
   const [inputImageFile, setInputImageFile] = useState<File | null>(null);
   const [inputImagePreview, setInputImagePreview] = useState<string | null>(null);
   
-  // Image-to-image parameters
-  const [img2imgStrength, setImg2imgStrength] = useState(0.8);
-  const [img2imgGuidanceScale, setImg2imgGuidanceScale] = useState(7.5);
-  const [img2imgInferenceSteps, setImg2imgInferenceSteps] = useState(50);
+  // Image-to-image parameters (optimized for speed)
+  const [img2imgStrength, setImg2imgStrength] = useState(0.7);
+  const [img2imgGuidanceScale, setImg2imgGuidanceScale] = useState(6.0);
+  const [img2imgInferenceSteps, setImg2imgInferenceSteps] = useState(25);
   const [showImg2ImgAdvanced, setShowImg2ImgAdvanced] = useState(false);
 
   // Clip Drop background removal states
@@ -983,14 +983,14 @@ export default function ImageGenerator() {
                       <input
                         type="range"
                         min="1"
-                        max="20"
+                        max="10"
                         step="0.5"
                         value={img2imgGuidanceScale}
                         onChange={(e) => setImg2imgGuidanceScale(parseFloat(e.target.value))}
                         className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
                       />
                       <p className="text-xs text-slate-500 mt-1">
-                        How closely to follow the prompt (higher = more adherence)
+                        How closely to follow the prompt (higher = more adherence) - Max 10 for optimal speed
                       </p>
                     </div>
 
@@ -1002,14 +1002,14 @@ export default function ImageGenerator() {
                       <input
                         type="range"
                         min="10"
-                        max="100"
-                        step="10"
+                        max="30"
+                        step="5"
                         value={img2imgInferenceSteps}
                         onChange={(e) => setImg2imgInferenceSteps(parseInt(e.target.value))}
                         className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
                       />
                       <p className="text-xs text-slate-500 mt-1">
-                        Number of processing steps (higher = better quality, slower)
+                        Number of processing steps (higher = better quality, slower) - Max 30 for optimal speed
                       </p>
                     </div>
                   </div>
