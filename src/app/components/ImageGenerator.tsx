@@ -77,6 +77,19 @@ const downloadFile = async (url: string, filename: string) => {
       return;
     }
 
+    // Check if it's a data URL (background-removed images)
+    if (url.startsWith('data:')) {
+      console.log('Downloading data URL directly:', url.substring(0, 50) + '...');
+      // For data URLs, download directly without going through the API
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+
     // For regular HTTP URLs, use the API to handle CORS issues
     console.log('Downloading HTTP URL via API:', url);
     const downloadUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
