@@ -41,4 +41,10 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+// Log auth initialization
+console.log('Firebase Auth initialized:', {
+  currentUser: auth.currentUser ? auth.currentUser.email : 'No current user',
+  authDomain: firebaseConfig.authDomain
+});
+
 export { app, auth, db, storage };

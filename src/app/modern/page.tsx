@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { ModernLayout } from '@/components/layout/ModernLayout'
 
-export default function Home() {
+export default function ModernPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
 

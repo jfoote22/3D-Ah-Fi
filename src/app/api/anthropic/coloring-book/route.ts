@@ -87,6 +87,7 @@ Return only the image generation prompt, nothing else.`
 
     // Generate the image directly using Replicate (avoiding internal API calls)
     const startTime = Date.now();
+    console.log("Coloring Book API - Starting Replicate image generation with prompt:", generatedPrompt);
     
     const output = await replicate.run("google/imagen-4-fast", {
       input: {
@@ -97,10 +98,14 @@ Return only the image generation prompt, nothing else.`
     });
 
     const generationTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log("Coloring Book API - Replicate output:", output);
+    console.log("Coloring Book API - Generation time:", generationTime);
     
     const imageUrl = Array.isArray(output) ? output[0] : output;
+    console.log("Coloring Book API - Final image URL:", imageUrl);
 
     if (!imageUrl || typeof imageUrl !== 'string') {
+      console.error("Coloring Book API - Invalid image URL:", imageUrl);
       throw new Error('Failed to generate image - no valid URL returned');
     }
 

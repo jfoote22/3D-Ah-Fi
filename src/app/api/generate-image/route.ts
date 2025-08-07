@@ -1,27 +1,24 @@
 import { NextResponse } from 'next/server';
 import Replicate from 'replicate';
 
-// Keep track of request count for debugging
-let requestCount = 0;
+import { logger, performanceLogger } from '@/lib/utils/logger';
 
-// Model info - keeping it as a constant for reference
-// Updated to use Google Imagen-4-Fast model
+// Model configuration
 const MODEL_ID = "google/imagen-4-fast";
 const MODEL_NAME = "Google Imagen-4-Fast";
 
 export async function POST(req: Request) {
-  requestCount++;
-  const currentRequest = requestCount;
-  console.log(`[DEBUG][Request #${currentRequest}] Starting image generation request at ${new Date().toISOString()}`);
+  const requestId = Math.random().toString(36).substr(2, 9);
+  performanceLogger.start(`image-generation-${requestId}`);
   
   try {
     // Validate request body
     let reqBody;
     try {
       reqBody = await req.json();
-      console.log(`[DEBUG][Request #${currentRequest}] Request body parsed successfully:`, reqBody);
+      logger.debug('Image generation request received', { requestId });
     } catch (e) {
-      console.error(`[DEBUG][Request #${currentRequest}] Failed to parse request body:`, e);
+      logger.error('Failed to parse request body', e);
       return NextResponse.json(
         { error: 'Invalid request body' },
         { status: 400 }
@@ -39,39 +36,34 @@ export async function POST(req: Request) {
     
     // Validate prompt
     if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
-      console.error(`[DEBUG][Request #${currentRequest}] Missing or invalid prompt`);
+      logger.error('Invalid prompt provided');
       return NextResponse.json(
         { error: 'Prompt is required and must be a non-empty string' },
         { status: 400 }
       );
     }
     
-    console.log(`[DEBUG][Request #${currentRequest}] Received prompt: "${prompt}"`);
+    logger.debug('Processing prompt', { prompt: prompt.substring(0, 50) + '...' });
     
     // Make sure we have the API token
     const apiToken = process.env.REPLICATE_API_TOKEN;
     if (!apiToken) {
-      console.error(`[DEBUG][Request #${currentRequest}] Missing API token`);
+      logger.error('Missing REPLICATE_API_TOKEN');
       return NextResponse.json(
         { error: "API configuration error: REPLICATE_API_TOKEN is not set" },
         { status: 500 }
       );
     }
     
-    console.log(`[DEBUG][Request #${currentRequest}] Using Replicate API token: ${apiToken.substring(0, 5)}...`);
-    
     try {
-      console.log(`[DEBUG][Request #${currentRequest}] Creating Replicate client`);
       const replicate = new Replicate({
         auth: apiToken,
       });
 
-      console.log(`[DEBUG][Request #${currentRequest}] Generating image for prompt: "${prompt}"`);
-      
-      // Start timing
+      logger.debug('Starting image generation');
       const startTime = Date.now();
       
-      // Prepare input params for debugging - optimized for Imagen-4-Fast
+      // Prepare input parameters for Imagen-4-Fast
       const inputParams: any = {
         prompt,
         aspect_ratio: aspect_ratio // Can be "1:1", "4:3", "3:4", "16:9", "9:16"
@@ -88,36 +80,19 @@ export async function POST(req: Request) {
         inputParams.person_generation = personGeneration;
       }
       
-      console.log(`[DEBUG][Request #${currentRequest}] Input parameters:`, inputParams);
-      
       // Use Google Imagen-4-Fast model
       let output;
       try {
-        console.log(`[DEBUG][Request #${currentRequest}] Calling Replicate API with model ID: ${MODEL_ID}`);
         output = await replicate.run(MODEL_ID, {
           input: inputParams
         }) as unknown as string;
         
-        console.log(`[DEBUG][Request #${currentRequest}] Replicate API call successful`);
-        console.log(`[DEBUG][Request #${currentRequest}] Received output type:`, typeof output);
-        if (typeof output === 'string') {
-          console.log(`[DEBUG][Request #${currentRequest}] Output URL prefix:`, output.substring(0, 50) + '...');
-        }
+        logger.debug('Replicate API call successful', { outputType: typeof output });
       } catch (replicateError) {
-        console.error(`[DEBUG][Request #${currentRequest}] Replicate API error:`, replicateError);
-        
-        // Check if there's detailed error information
-        if (replicateError && (replicateError as any).response) {
-          try {
-            console.error(`[DEBUG][Request #${currentRequest}] Error response:`, JSON.stringify((replicateError as any).response));
-          } catch (e) {
-            console.error(`[DEBUG][Request #${currentRequest}] Could not stringify error response`);
-          }
-        }
+        logger.error('Replicate API error', replicateError);
         
         // Check for specific error types and provide helpful messages
         const errorMessage = replicateError instanceof Error ? replicateError.message : String(replicateError);
-        console.error(`[DEBUG][Request #${currentRequest}] Error message:`, errorMessage);
         
         if (errorMessage.includes('402') || errorMessage.includes('Payment Required')) {
           return NextResponse.json(
@@ -145,7 +120,7 @@ export async function POST(req: Request) {
       
       // Validate output for Imagen-4-Fast (returns single string URL)
       if (!output || typeof output !== 'string') {
-        console.error(`[DEBUG][Request #${currentRequest}] Invalid output from Replicate:`, output);
+        logger.error('Invalid output from Replicate', output);
         return NextResponse.json(
           { error: 'Received invalid response from image generation service' },
           { status: 500 }
@@ -153,9 +128,13 @@ export async function POST(req: Request) {
       }
 
       // Calculate generation time
-      const generationTime = (Date.now() - startTime) / 1000; // in seconds
+      const generationTime = (Date.now() - startTime) / 1000;
+      performanceLogger.end(`image-generation-${requestId}`);
       
-      console.log(`[DEBUG][Request #${currentRequest}] Image generated successfully in ${generationTime.toFixed(2)}s`);
+      logger.info('Image generated successfully', { 
+        generationTime: generationTime.toFixed(2) + 's',
+        model: MODEL_NAME 
+      });
       
       // Return image URL and generation details
       return NextResponse.json({
@@ -171,14 +150,14 @@ export async function POST(req: Request) {
         personGeneration
       });
     } catch (initError) {
-      console.error(`[DEBUG][Request #${currentRequest}] Error initializing Replicate client:`, initError);
+      logger.error('Failed to initialize Replicate client', initError);
       return NextResponse.json(
         { error: `Failed to initialize the image generation service: ${String(initError)}` },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error(`[DEBUG][Request #${currentRequest}] Unexpected error generating image:`, error);
+    logger.error('Unexpected error generating image', error);
     return NextResponse.json(
       { error: 'An unexpected error occurred while generating the image' },
       { status: 500 }

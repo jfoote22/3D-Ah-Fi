@@ -2,12 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'edge';
 
-const CLIPDROP_API_KEY = process.env.CLIPDROP_API_KEY || '54762628177e68abbd17604f6142fe55f5a76a2d3cfefa1a06621c586e362920dabf8f74dcad5b25a8493c8aa21bd088';
+const CLIPDROP_API_KEY = process.env.CLIPDROP_API_KEY;
 
 export async function POST(req: NextRequest) {
   try {
+    // Check if API key is configured
+    if (!CLIPDROP_API_KEY) {
+      return NextResponse.json(
+        { error: 'ClipDrop API key not configured. Please add CLIPDROP_API_KEY to your environment variables.' },
+        { status: 500 }
+      );
+    }
+
     const formData = await req.formData();
+    console.log('FormData keys:', Array.from(formData.keys()));
+    
     const imageFile = formData.get('image_file') as File;
+    console.log('Image file received:', imageFile ? {
+      name: imageFile.name,
+      size: imageFile.size,
+      type: imageFile.type
+    } : 'null');
     
     if (!imageFile) {
       return NextResponse.json({ error: 'No image file provided' }, { status: 400 });

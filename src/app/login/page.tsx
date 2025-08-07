@@ -20,8 +20,11 @@ export default function LoginPage() {
   // Show loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-lg">Loading...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-primary font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -29,28 +32,31 @@ export default function LoginPage() {
   // If user is authenticated, don't show login form (will redirect via useEffect)
   if (user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-lg">Redirecting...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-primary font-medium">Redirecting...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl border border-slate-700 p-8 shadow-xl">
+        <div className="bg-card border border-border rounded-xl p-8 shadow-lg">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold gradient-text mb-2">
+            <h1 className="text-3xl font-bold text-foreground mb-2">
               Welcome to 3D-Ah-Fi
             </h1>
-            <p className="text-slate-400">
+            <p className="text-muted-foreground">
               Sign in to start creating amazing AI-generated images and 3D models
             </p>
           </div>
           
           <SignInWithGoogle />
           
-          <div className="mt-6 text-center text-xs text-slate-500">
+          <div className="mt-6 text-center text-xs text-muted-foreground">
             By signing in, you agree to our Terms of Service and Privacy Policy
           </div>
         </div>

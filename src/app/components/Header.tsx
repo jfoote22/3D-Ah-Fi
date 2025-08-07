@@ -94,6 +94,16 @@ export default function Header() {
               Home
             </Link>
             <Link 
+              href="/my-creations" 
+              className={`text-sm font-medium transition-colors ${
+                pathname === '/my-creations' 
+                  ? 'text-blue-400' 
+                  : 'text-slate-300 hover:text-blue-400'
+              }`}
+            >
+              My Creations
+            </Link>
+            <Link 
               href="/my-models" 
               className={`text-sm font-medium transition-colors ${
                 pathname === '/my-models' 
@@ -143,6 +153,13 @@ export default function Header() {
                   </div>
                   <div>
                     <Link 
+                      href="/my-creations"
+                      className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                      onClick={() => setProfileMenuOpen(false)}
+                    >
+                      My Creations
+                    </Link>
+                    <Link 
                       href="/my-models"
                       className="block px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
                       onClick={() => setProfileMenuOpen(false)}
@@ -190,6 +207,13 @@ export default function Header() {
               onClick={() => setMenuOpen(false)}
             >
               Home
+            </Link>
+            <Link
+              href="/my-creations"
+              className="block px-4 py-2 text-base font-medium text-slate-300 hover:bg-slate-800 transition-colors"
+              onClick={() => setMenuOpen(false)}
+            >
+              My Creations
             </Link>
             <Link
               href="/my-models"

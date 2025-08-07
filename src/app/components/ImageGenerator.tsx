@@ -613,11 +613,30 @@ export default function ImageGenerator() {
 
     try {
       console.log('🎨 Starting background removal for generated image...');
+      console.log('Image URL type:', imageUrl.startsWith('data:') ? 'data URL' : 'HTTP URL');
+      console.log('Image URL (first 100 chars):', imageUrl.substring(0, 100));
       
-      // Convert image URL to blob/file
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const file = new File([blob], 'generated-image.png', { type: 'image/png' });
+      let file: File;
+      
+      if (imageUrl.startsWith('data:')) {
+        // Handle data URL (base64)
+        console.log('Processing data URL...');
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        file = new File([blob], 'generated-image.png', { type: 'image/png' });
+      } else {
+        // Handle HTTP URL
+        console.log('Processing HTTP URL...');
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+        }
+        const blob = await response.blob();
+        file = new File([blob], 'generated-image.png', { type: 'image/png' });
+      }
+      
+      console.log('Created file for background removal:', file.name, file.size, 'bytes');
+      console.log('File type:', file.type);
       
       const formData = new FormData();
       formData.append('image_file', file);
