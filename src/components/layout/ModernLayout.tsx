@@ -7,7 +7,8 @@ import { WorkflowSteps } from '@/components/workflow/WorkflowSteps'
 import Link from 'next/link'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { Button } from '@/components/ui/button'
-import { User, LogOut } from 'lucide-react'
+import { User, LogOut, RefreshCw } from 'lucide-react'
+import { useWorkflowStore } from '@/lib/stores/workflow-store'
 
 interface ModernLayoutProps {
   children?: React.ReactNode
@@ -15,6 +16,7 @@ interface ModernLayoutProps {
 
 export function ModernLayout({ children }: ModernLayoutProps) {
   const { user, signOut, loading } = useAuth()
+  const resetWorkflow = useWorkflowStore(state => state.resetWorkflow)
 
   // Show loading state while authentication is being determined
   if (loading) {
@@ -26,6 +28,15 @@ export function ModernLayout({ children }: ModernLayoutProps) {
         </div>
       </div>
     )
+  }
+
+  const handleReset = () => {
+    const confirmed = window.confirm('Start over and clear your current progress?')
+    if (confirmed) {
+      resetWorkflow()
+      // Optionally, scroll to top to emphasize reset
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 
   return (
@@ -48,6 +59,16 @@ export function ModernLayout({ children }: ModernLayoutProps) {
                     My Creations
                   </Link>
                 </nav>
+                {/* Reset workflow button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleReset}
+                  className="gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Reset
+                </Button>
                 {user && (
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
