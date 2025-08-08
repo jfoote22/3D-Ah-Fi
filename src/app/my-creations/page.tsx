@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -47,18 +47,7 @@ export default function MyCreations() {
     }
   }, [user, loading, router]);
 
-  useEffect(() => {
-    if (user) {
-      loadCreations();
-      loadPrompts();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    filterCreations();
-  }, [creations, searchTerm, selectedType]);
-
-  const loadCreations = async () => {
+  const loadCreations = useCallback(async () => {
     setLoadingCreations(true);
     try {
       const items = await listUserCreations(user!.uid);
@@ -73,9 +62,9 @@ export default function MyCreations() {
     } finally {
       setLoadingCreations(false);
     }
-  };
+  }, [user])
 
-  const loadPrompts = async () => {
+  const loadPrompts = useCallback(async () => {
     try {
       const data = await listUserPrompts(user!.uid)
       setPrompts(data.sort((a: any, b: any) => {
@@ -86,7 +75,34 @@ export default function MyCreations() {
     } catch (e) {
       console.error('Error loading prompts', e)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      loadCreations();
+      loadPrompts();
+    }
+  }, [user, loadCreations, loadPrompts]);
+
+  const filterCreations = useCallback(() => {
+    let filtered = creations;
+
+    if (searchTerm) {
+      filtered = filtered.filter(creation =>
+        creation.prompt.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (selectedType !== 'all') {
+      filtered = filtered.filter(creation => creation.type === selectedType);
+    }
+
+    setFilteredCreations(filtered);
+  }, [creations, searchTerm, selectedType])
+
+  useEffect(() => {
+    filterCreations();
+  }, [filterCreations]);
 
   // Add missing prompt helpers for Saved Prompts actions
   const deletePrompt = async (id: string) => {
@@ -108,22 +124,6 @@ export default function MyCreations() {
     router.push('/')
   }
 
-  const filterCreations = () => {
-    let filtered = creations;
-
-    if (searchTerm) {
-      filtered = filtered.filter(creation =>
-        creation.prompt.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (selectedType !== 'all') {
-      filtered = filtered.filter(creation => creation.type === selectedType);
-    }
-
-    setFilteredCreations(filtered);
-  };
-
   const deleteCreation = async (id: string, type: string) => {
     try {
       await deleteCreationById(id);
@@ -139,7 +139,7 @@ export default function MyCreations() {
   const addGeneratedModel = useWorkflowStore(s => s.addGeneratedModel)
   const setCurrentStep = useWorkflowStore(s => s.setCurrentStep)
 
-  const useInStudio = (creation: SavedCreation) => {
+  const openInStudio = (creation: SavedCreation) => {
     if (creation.type === '3d-model' && creation.modelUrl) {
       addGeneratedModel({
         id: creation.id,
@@ -429,7 +429,7 @@ export default function MyCreations() {
                       Download
                     </button>
                     <button
-                      onClick={() => useInStudio(creation)}
+                      onClick={() => openInStudio(creation)}
                       className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm rounded-lg transition-colors"
                     >
                       <Rocket className="w-3 h-3" />
