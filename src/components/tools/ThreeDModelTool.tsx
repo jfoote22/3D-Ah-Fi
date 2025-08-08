@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Box, Download, RefreshCw, AlertCircle } from 'lucide-react'
+import { Box, Download, RefreshCw, AlertCircle, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { logger, performanceLogger } from '@/lib/utils/logger'
 import { generateId } from '@/lib/utils'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 // Import the existing ModelViewer component
 import ModelViewer from '@/app/components/ModelViewer'
@@ -57,6 +58,7 @@ export function ThreeDModelTool({
   className 
 }: ThreeDModelToolProps) {
   const { addGeneratedModel } = useWorkflowStore()
+  const { user } = useAuth()
   
   const [modelUrl, setModelUrl] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -326,6 +328,31 @@ export function ThreeDModelTool({
                     <Download className="w-4 h-4 mr-2" />
                     Download GLB
                   </Button>
+                  {user && (
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        await fetch('/api/creations', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            userId: user.uid,
+                            items: [
+                              {
+                                type: '3d-model',
+                                prompt: customPrompt || prompt || '',
+                                modelUrl,
+                                metadata: { generationTime },
+                              },
+                            ],
+                          }),
+                        })
+                      }}
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                  )}
                 </div>
               </div>
 

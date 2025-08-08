@@ -52,22 +52,29 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
         modelCount: generatedModels.length
       })
 
-      const projectData = {
-        name: projectName.trim(),
-        description: projectDescription.trim(),
-        images: generatedImages,
-        models: generatedModels,
-        userId: user.uid,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
+      // Build items payload from current workflow state
+      const items = [
+        ...generatedImages.map(img => ({
+          type: 'image' as const,
+          prompt: img.prompt,
+          imageUrl: img.url,
+          aspectRatio: img.metadata?.aspectRatio,
+          model: img.metadata?.model,
+          metadata: img.metadata,
+        })),
+        ...generatedModels.map(model => ({
+          type: '3d-model' as const,
+          prompt: model.metadata?.prompt || '',
+          modelUrl: model.url,
+          sourceImageId: model.sourceImageId,
+          metadata: model.metadata,
+        })),
+      ]
 
-      const response = await fetch('/api/save-image', {
+      const response = await fetch('/api/creations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(projectData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid, items })
       })
 
       if (!response.ok) {
@@ -76,11 +83,10 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
       }
 
       const result = await response.json()
-      
-      logger.info('Project saved successfully', { projectId: result.id })
+      logger.info('Project saved successfully', { created: result.created })
 
       setSaved(true)
-      setTimeout(() => setSaved(false), 3000) // Reset success state after 3 seconds
+      setTimeout(() => setSaved(false), 3000)
 
     } catch (error) {
       logger.error('Failed to save project', error)
@@ -122,7 +128,6 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
             )}
           </div>
 
-          {/* User status */}
           {!user ? (
             <div className="p-4 bg-muted/50 rounded-lg text-center">
               <Cloud className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
@@ -132,7 +137,6 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Success message */}
               {saved && (
                 <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-500" />
@@ -142,7 +146,6 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
                 </div>
               )}
 
-              {/* Error message */}
               {error && (
                 <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-destructive" />
@@ -150,7 +153,6 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
                 </div>
               )}
 
-              {/* Project details form */}
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">
@@ -176,7 +178,6 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
                 </div>
               </div>
 
-              {/* Content summary */}
               {totalItems > 0 && (
                 <div className="p-4 bg-muted/50 rounded-lg">
                   <h4 className="text-sm font-medium mb-2">Content to Save:</h4>
@@ -201,7 +202,6 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
                 </div>
               )}
 
-              {/* Action buttons */}
               <div className="flex items-center gap-2 pt-2">
                 {saved && (
                   <Button

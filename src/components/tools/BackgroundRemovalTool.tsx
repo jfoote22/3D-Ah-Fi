@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
-import { Scissors, Upload, Download, RefreshCw, AlertCircle } from 'lucide-react'
+import { Scissors, Upload, Download, RefreshCw, AlertCircle, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 interface BackgroundRemovalToolProps {
   imageUrl?: string
@@ -24,6 +25,7 @@ export function BackgroundRemovalTool({
   className 
 }: BackgroundRemovalToolProps) {
   const { updateImageBackgroundRemoved } = useWorkflowStore()
+  const { user } = useAuth()
   const [inputImage, setInputImage] = useState<string>(imageUrl || '')
   const [inputFile, setInputFile] = useState<File | null>(null)
   const [resultImage, setResultImage] = useState<string>('')
@@ -291,6 +293,35 @@ export function BackgroundRemovalTool({
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Download
+                    </Button>
+                  )}
+                  {resultImage && user && (
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/creations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              userId: user.uid,
+                              items: [
+                                {
+                                  type: 'background-removed',
+                                  prompt: 'Background removed image',
+                                  imageUrl: resultImage,
+                                  metadata: { source: imageUrl || 'uploaded' },
+                                },
+                              ],
+                            }),
+                          })
+                        } catch (e) {
+                          console.error(e)
+                        }
+                      }}
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
                     </Button>
                   )}
                   

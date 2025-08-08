@@ -44,24 +44,18 @@ export default function MyCreations() {
     filterCreations();
   }, [creations, searchTerm, selectedType]);
 
-  const loadCreations = () => {
+  const loadCreations = async () => {
     setLoadingCreations(true);
     try {
-      // Load from localStorage
-      const savedImages = JSON.parse(localStorage.getItem('saved-images') || '[]');
-      const savedModels = JSON.parse(localStorage.getItem('saved-models') || '[]');
-      const savedColoringBooks = JSON.parse(localStorage.getItem('saved-coloring-books') || '[]');
-      const savedBackgroundRemoved = JSON.parse(localStorage.getItem('saved-background-removed') || '[]');
-
-      // Combine all creations and sort by creation date
-      const allCreations = [
-        ...savedImages.map((item: any) => ({ ...item, type: 'image' as const })),
-        ...savedModels.map((item: any) => ({ ...item, type: '3d-model' as const })),
-        ...savedColoringBooks.map((item: any) => ({ ...item, type: 'coloring-book' as const })),
-        ...savedBackgroundRemoved.map((item: any) => ({ ...item, type: 'background-removed' as const }))
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      setCreations(allCreations);
+      const res = await fetch(`/api/creations?userId=${user!.uid}`);
+      if (!res.ok) throw new Error('Failed to load creations');
+      const data = await res.json();
+      const items = (data.items || []).sort((a: any, b: any) => {
+        const ad = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+        const bd = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+        return bd - ad;
+      });
+      setCreations(items);
     } catch (error) {
       console.error('Error loading creations:', error);
     } finally {
@@ -72,14 +66,12 @@ export default function MyCreations() {
   const filterCreations = () => {
     let filtered = creations;
 
-    // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(creation =>
         creation.prompt.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    // Filter by type
     if (selectedType !== 'all') {
       filtered = filtered.filter(creation => creation.type === selectedType);
     }
@@ -87,15 +79,10 @@ export default function MyCreations() {
     setFilteredCreations(filtered);
   };
 
-  const deleteCreation = (id: string, type: string) => {
+  const deleteCreation = async (id: string, type: string) => {
     try {
-      // Remove from localStorage
-      const storageKey = `saved-${type === '3d-model' ? 'models' : type === 'coloring-book' ? 'coloring-books' : type === 'background-removed' ? 'background-removed' : 'images'}`;
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      const updated = stored.filter((item: any) => item.id !== id);
-      localStorage.setItem(storageKey, JSON.stringify(updated));
-
-      // Update state
+      const res = await fetch(`/api/creations/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
       setCreations(prev => prev.filter(creation => creation.id !== id));
     } catch (error) {
       console.error('Error deleting creation:', error);

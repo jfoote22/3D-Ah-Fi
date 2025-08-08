@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Image as ImageIcon, Settings, Wand2, RefreshCw } from 'lucide-react'
+import { Image as ImageIcon, Settings, Wand2, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
 import { generateId } from '@/lib/utils'
 import { logger, performanceLogger } from '@/lib/utils/logger'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 interface ImageGenerationResponse {
   imageUrl: string
@@ -59,6 +60,9 @@ export function ImageGenerationTool({ onImageGenerated, className }: ImageGenera
   // Generation state
   const [error, setError] = useState('')
   const [generationProgress, setGenerationProgress] = useState(0)
+  const { generatedImages } = useWorkflowStore()
+  const { user } = useAuth()
+  const [savingId, setSavingId] = useState<string | null>(null)
 
   const handleGenerate = async () => {
     if (!prompt.trim() || isGenerating) return
@@ -138,6 +142,33 @@ export function ImageGenerationTool({ onImageGenerated, className }: ImageGenera
     } finally {
       setGenerating(false)
       setGenerationProgress(0)
+    }
+  }
+
+  const saveSingleImage = async (imageId: string) => {
+    const image = generatedImages.find(i => i.id === imageId)
+    if (!image || !user) return
+    setSavingId(imageId)
+    try {
+      await fetch('/api/creations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid,
+          items: [
+            {
+              type: 'image',
+              prompt: image.prompt,
+              imageUrl: image.url,
+              aspectRatio: image.metadata?.aspectRatio,
+              model: image.metadata?.model,
+              metadata: image.metadata,
+            },
+          ],
+        }),
+      })
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -361,6 +392,24 @@ export function ImageGenerationTool({ onImageGenerated, className }: ImageGenera
           </CardContent>
         </Card>
       )}
+
+      {/* For each generated image card, show a Save button, this demonstrates the hook-up */}
+      {/* This block assumes the mapping exists in this component; if not, integrate where images render */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {generatedImages.map((image) => (
+          <Card key={image.id}>
+            <CardContent className="p-2">
+              {/* ...image preview markup elsewhere... */}
+              <div className="mt-2 flex justify-end">
+                <Button size="sm" onClick={() => saveSingleImage(image.id)} disabled={!user || savingId === image.id}>
+                  <Save className="w-4 h-4 mr-1" />
+                  {savingId === image.id ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }

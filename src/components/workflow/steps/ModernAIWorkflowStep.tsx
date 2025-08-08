@@ -13,7 +13,8 @@ import {
   ArrowRight,
   Settings,
   Wand2,
-  History
+  History,
+  Save
 } from 'lucide-react'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
 import { WorkflowCard } from '../WorkflowCard'
@@ -24,6 +25,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 type WorkflowMode = 'image-generation' | 'claude-prompt' | 'coloring-book'
 
@@ -52,6 +54,7 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
     setGenerating,
     addGeneratedImage
   } = useWorkflowStore()
+  const { user } = useAuth()
 
   // Mode state
   const [currentMode, setCurrentMode] = useState<WorkflowMode>('image-generation')
@@ -347,13 +350,32 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
                       <Download className="w-4 h-4" />
                       Download
                     </Button>
-                    <Button
-                      onClick={() => saveCreation('image', imageUrl, localPrompt)}
-                      variant="outline"
-                      className="gap-2"
-                    >
-                      Save to Library
-                    </Button>
+                    {user && (
+                      <Button
+                        onClick={async () => {
+                          await fetch('/api/creations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              userId: user.uid,
+                              items: [
+                                {
+                                  type: 'image',
+                                  prompt: localPrompt,
+                                  imageUrl,
+                                  metadata: {},
+                                },
+                              ],
+                            }),
+                          })
+                        }}
+                        variant="outline"
+                        className="gap-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save to Library
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
@@ -521,6 +543,31 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
                       <Download className="w-4 h-4" />
                       Download
                     </Button>
+                    {user && (
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await fetch('/api/creations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              userId: user.uid,
+                              items: [
+                                {
+                                  type: 'coloring-book',
+                                  prompt: `${coloringBookThing} ${coloringBookAction}${coloringBookStyle ? ' ' + coloringBookStyle : ''}`,
+                                  imageUrl: coloringBookResult,
+                                  metadata: {},
+                                },
+                              ],
+                            }),
+                          })
+                        }}
+                      >
+                        <Save className="w-4 h-4" />
+                        Save to Library
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       onClick={() => setColoringBookResult('')}
