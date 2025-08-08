@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Box, Download, RefreshCw, AlertCircle, Save } from 'lucide-react'
+import { Box, Download, RefreshCw, AlertCircle, Save, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,7 @@ import { logger, performanceLogger } from '@/lib/utils/logger'
 import { generateId } from '@/lib/utils'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { saveCreations } from '@/lib/firebase/firebaseUtils'
 
 // Import the existing ModelViewer component
 import ModelViewer from '@/app/components/ModelViewer'
@@ -68,6 +69,8 @@ export function ThreeDModelTool({
   const [customPrompt, setCustomPrompt] = useState(prompt || '')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [useBackgroundRemovedImage, setUseBackgroundRemovedImage] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const handleGenerate3D = async () => {
     const sourceImageUrl = useBackgroundRemovedImage && backgroundRemovedImageUrl ? backgroundRemovedImageUrl : imageUrl
@@ -332,25 +335,22 @@ export function ThreeDModelTool({
                     <Button
                       variant="outline"
                       onClick={async () => {
-                        await fetch('/api/creations', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            userId: user.uid,
-                            items: [
-                              {
-                                type: '3d-model',
-                                prompt: customPrompt || prompt || '',
-                                modelUrl,
-                                metadata: { generationTime },
-                              },
-                            ],
-                          }),
-                        })
+                        try {
+                          setSaving(true)
+                          await saveCreations(user.uid, [{
+                            type: '3d-model',
+                            prompt: customPrompt || prompt || '',
+                            modelUrl,
+                            metadata: { generationTime },
+                          }])
+                          setSaved(true)
+                          setTimeout(() => setSaved(false), 2000)
+                        } finally {
+                          setSaving(false)
+                        }
                       }}
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      Save
+                      {saved ? (<><Check className="w-4 h-4 mr-2" /> Saved</>) : saving ? 'Saving...' : (<><Save className="w-4 h-4 mr-2" /> Save</>)}
                     </Button>
                   )}
                 </div>

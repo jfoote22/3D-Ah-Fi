@@ -26,6 +26,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { saveCreations, savePrompt } from '@/lib/firebase/firebaseUtils'
+import { useRouter } from 'next/navigation'
 
 type WorkflowMode = 'image-generation' | 'claude-prompt' | 'coloring-book'
 
@@ -55,7 +57,12 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
     addGeneratedImage
   } = useWorkflowStore()
   const { user } = useAuth()
-
+  const router = useRouter()
+  const [savingImage, setSavingImage] = useState(false)
+  const [imageSaved, setImageSaved] = useState(false)
+  const [savingColoring, setSavingColoring] = useState(false)
+  const [coloringSaved, setColoringSaved] = useState(false)
+  
   // Mode state
   const [currentMode, setCurrentMode] = useState<WorkflowMode>('image-generation')
   const [localPrompt, setLocalPrompt] = useState(prompt)
@@ -353,27 +360,19 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
                     {user && (
                       <Button
                         onClick={async () => {
-                          await fetch('/api/creations', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              userId: user.uid,
-                              items: [
-                                {
-                                  type: 'image',
-                                  prompt: localPrompt,
-                                  imageUrl,
-                                  metadata: {},
-                                },
-                              ],
-                            }),
-                          })
+                          try {
+                            setSavingImage(true)
+                            await saveCreations(user.uid, [{ type: 'image', prompt: localPrompt, imageUrl, metadata: {} }])
+                            setImageSaved(true)
+                            setTimeout(() => setImageSaved(false), 2000)
+                          } finally {
+                            setSavingImage(false)
+                          }
                         }}
                         variant="outline"
                         className="gap-2"
                       >
-                        <Save className="w-4 h-4" />
-                        Save to Library
+                        {imageSaved ? 'Saved' : savingImage ? 'Saving...' : (<><Save className="w-4 h-4" /> Save to Library</>)}
                       </Button>
                     )}
                   </div>
@@ -411,6 +410,17 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
                     Enhance with Claude
                   </>
                 )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!claudePrompt.trim()) return
+                  if (!user) { router.push('/login'); return }
+                  await savePrompt(user.uid, claudePrompt)
+                }}
+              >
+                <Save className="w-4 h-4" />
+                Save Prompt
               </Button>
 
               {claudeError && (
@@ -547,25 +557,17 @@ export function ModernAIWorkflowStep({ className }: ModernAIWorkflowStepProps) {
                       <Button
                         variant="outline"
                         onClick={async () => {
-                          await fetch('/api/creations', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              userId: user.uid,
-                              items: [
-                                {
-                                  type: 'coloring-book',
-                                  prompt: `${coloringBookThing} ${coloringBookAction}${coloringBookStyle ? ' ' + coloringBookStyle : ''}`,
-                                  imageUrl: coloringBookResult,
-                                  metadata: {},
-                                },
-                              ],
-                            }),
-                          })
+                          try {
+                            setSavingColoring(true)
+                            await saveCreations(user.uid, [{ type: 'coloring-book', prompt: `${coloringBookThing} ${coloringBookAction}${coloringBookStyle ? ' ' + coloringBookStyle : ''}`, imageUrl: coloringBookResult, metadata: {} }])
+                            setColoringSaved(true)
+                            setTimeout(() => setColoringSaved(false), 2000)
+                          } finally {
+                            setSavingColoring(false)
+                          }
                         }}
                       >
-                        <Save className="w-4 h-4" />
-                        Save to Library
+                        {coloringSaved ? 'Saved' : savingColoring ? 'Saving...' : (<><Save className="w-4 h-4" /> Save to Library</>)}
                       </Button>
                     )}
                     <Button

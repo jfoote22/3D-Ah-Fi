@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
 import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
+import { saveCreations } from '@/lib/firebase/firebaseUtils'
 
 interface SaveToLibraryToolProps {
   className?: string
@@ -71,19 +72,8 @@ export function SaveToLibraryTool({ className }: SaveToLibraryToolProps) {
         })),
       ]
 
-      const response = await fetch('/api/creations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, items })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to save project')
-      }
-
-      const result = await response.json()
-      logger.info('Project saved successfully', { created: result.created })
+      const createdIds = await saveCreations(user.uid, items)
+      logger.info('Project saved successfully', { created: createdIds })
 
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)

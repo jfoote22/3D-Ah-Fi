@@ -393,23 +393,7 @@ export function ImageGenerationTool({ onImageGenerated, className }: ImageGenera
         </Card>
       )}
 
-      {/* For each generated image card, show a Save button, this demonstrates the hook-up */}
-      {/* This block assumes the mapping exists in this component; if not, integrate where images render */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {generatedImages.map((image) => (
-          <Card key={image.id}>
-            <CardContent className="p-2">
-              {/* ...image preview markup elsewhere... */}
-              <div className="mt-2 flex justify-end">
-                <Button size="sm" onClick={() => saveSingleImage(image.id)} disabled={!user || savingId === image.id}>
-                  <Save className="w-4 h-4 mr-1" />
-                  {savingId === image.id ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
     </div>
   )
 }

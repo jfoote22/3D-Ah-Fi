@@ -1,7 +1,7 @@
 'use client'
 
-import React from 'react'
-import { Image as ImageIcon, ArrowRight, Wand2 } from 'lucide-react'
+import React, { useState } from 'react'
+import { Image as ImageIcon, ArrowRight, Wand2, Save, Check } from 'lucide-react'
 import { useWorkflowStore, useGeneratedImages } from '@/lib/stores/workflow-store'
 import { WorkflowCard } from '../WorkflowCard'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ImageGenerationTool } from '@/components/tools/ImageGenerationTool'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { saveCreations } from '@/lib/firebase/firebaseUtils'
 
 export function GenerateStep() {
   const { 
@@ -21,6 +23,9 @@ export function GenerateStep() {
   } = useWorkflowStore()
   
   const generatedImages = useGeneratedImages()
+  const { user } = useAuth()
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [savedMap, setSavedMap] = useState<Record<string, boolean>>({})
 
   const handleImageGenerated = () => {
     completeStep('generate')
@@ -34,6 +39,25 @@ export function GenerateStep() {
     if (generatedImages.length > 0) {
       completeStep('generate')
       setCurrentStep('enhance')
+    }
+  }
+
+  const saveSingleImage = async (imageId: string) => {
+    const image = generatedImages.find(i => i.id === imageId)
+    if (!image || !user || savedMap[imageId]) return
+    try {
+      setSavingId(imageId)
+      await saveCreations(user.uid, [{
+        type: 'image',
+        prompt: image.prompt,
+        imageUrl: image.url,
+        aspectRatio: image.metadata?.aspectRatio,
+        model: image.metadata?.model,
+        metadata: image.metadata,
+      }])
+      setSavedMap(prev => ({ ...prev, [imageId]: true }))
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -100,6 +124,25 @@ export function GenerateStep() {
                         <Badge className="bg-primary text-primary-foreground">
                           Selected
                         </Badge>
+                      </div>
+                    )}
+                    {user && (
+                      <div className="absolute bottom-2 right-2">
+                        <Button
+                          size="sm"
+                          variant={savedMap[image.id] ? 'secondary' : 'secondary'}
+                          onClick={(e) => { e.stopPropagation(); saveSingleImage(image.id) }}
+                          className="gap-1"
+                          disabled={!!savedMap[image.id] || savingId === image.id}
+                        >
+                          {savedMap[image.id] ? (
+                            <><Check className="w-3 h-3" /> Saved</>
+                          ) : savingId === image.id ? (
+                            <>Saving...</>
+                          ) : (
+                            <><Save className="w-3 h-3" /> Save</>
+                          )}
+                        </Button>
                       </div>
                     )}
                   </div>

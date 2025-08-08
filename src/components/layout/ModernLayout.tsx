@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { User, LogOut, RefreshCw } from 'lucide-react'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
+import Image from 'next/image'
 
 interface ModernLayoutProps {
   children?: React.ReactNode
@@ -51,12 +52,9 @@ export function ModernLayout({ children }: ModernLayoutProps) {
                 <p className="text-sm text-muted-foreground">AI-Powered Creative Studio</p>
               </div>
               <div className="flex items-center gap-4">
-                <nav className="hidden md:flex items-center space-x-6">
-                  <Link 
-                    href="/my-creations" 
-                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    My Creations
+                <nav className="hidden md:flex items-center space-x-3">
+                  <Link href="/my-creations">
+                    <Button variant="secondary" size="sm">My Creations</Button>
                   </Link>
                 </nav>
                 {/* Reset workflow button */}
@@ -71,9 +69,20 @@ export function ModernLayout({ children }: ModernLayoutProps) {
                 </Button>
                 {user && (
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <User className="w-4 h-4" />
-                      <span>{user.email}</span>
+                    <div className="flex items-center gap-2">
+                      {user.photoURL ? (
+                        <Image
+                          src={user.photoURL}
+                          alt={user.displayName || user.email || 'Profile'}
+                          width={32}
+                          height={32}
+                          className="rounded-full border border-border"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                          <User className="w-4 h-4" />
+                        </div>
+                      )}
                     </div>
                     <Button
                       variant="outline"

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
-import { Scissors, Upload, Download, RefreshCw, AlertCircle, Save } from 'lucide-react'
+import { Scissors, Upload, Download, RefreshCw, AlertCircle, Save, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { logger } from '@/lib/utils/logger'
 import { useWorkflowStore } from '@/lib/stores/workflow-store'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { saveCreations } from '@/lib/firebase/firebaseUtils'
 
 interface BackgroundRemovalToolProps {
   imageUrl?: string
@@ -32,6 +33,8 @@ export function BackgroundRemovalTool({
   const [isRemoving, setIsRemoving] = useState(false)
   const [error, setError] = useState('')
   const [credits, setCredits] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -300,28 +303,23 @@ export function BackgroundRemovalTool({
                       variant="outline"
                       onClick={async () => {
                         try {
-                          await fetch('/api/creations', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              userId: user.uid,
-                              items: [
-                                {
-                                  type: 'background-removed',
-                                  prompt: 'Background removed image',
-                                  imageUrl: resultImage,
-                                  metadata: { source: imageUrl || 'uploaded' },
-                                },
-                              ],
-                            }),
-                          })
+                          setSaving(true)
+                          await saveCreations(user.uid, [{
+                            type: 'background-removed',
+                            prompt: 'Background removed image',
+                            imageUrl: resultImage,
+                            metadata: { source: imageUrl || 'uploaded' },
+                          }])
+                          setSaved(true)
+                          setTimeout(() => setSaved(false), 2000)
                         } catch (e) {
                           console.error(e)
+                        } finally {
+                          setSaving(false)
                         }
                       }}
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      Save
+                      {saved ? (<><Check className="w-4 h-4 mr-2" /> Saved</>) : saving ? 'Saving...' : (<><Save className="w-4 h-4 mr-2" /> Save</>)}
                     </Button>
                   )}
                   
